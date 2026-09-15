@@ -1,0 +1,52 @@
+# .github/workflows/security.yml
+# Installed by lockdown-security. Runs npm audit on every PR + push to main,
+# typecheck + build to catch type regressions, and a daily run on main to
+# pick up advisories that drop overnight.
+name: security
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    # Daily at 03:00 UTC — catches new advisories dropped overnight.
+    - cron: "0 3 * * *"
+
+# This workflow only consumes well-formed inputs (no PR titles or
+# user-supplied strings flow into `run:` blocks), so contents:read is enough.
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: npm audit (high+)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: "npm"
+      - run: npm ci --ignore-scripts
+      - name: npm audit (production only, high+)
+        run: npm audit --omit=dev --audit-level=high
+
+  typecheck-and-build:
+    name: typecheck + build
+    runs-on: ubuntu-latest
+    env:
+      # Build-time placeholders — production env vars live elsewhere.
+      NEXT_PUBLIC_GOOGLE_CLIENT_ID: build-placeholder
+      AUTH_SECRET: build-placeholder-build-placeholder-build-pl=
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: "npm"
+      - run: npm ci --ignore-scripts
+      - name: Generate Prisma client (skipped if no Prisma)
+        run: '[ -f prisma/schema.prisma ] && npx prisma generate || echo "no prisma, skipping"'
+      - run: npx tsc --noEmit
+      - run: npm run build

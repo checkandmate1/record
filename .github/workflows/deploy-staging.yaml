@@ -1,22 +1,22 @@
-name: Deploy
+name: Deploy staging
 
 on:
-  release:
-    types: [published]
+  push:
+    branches: [staging]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: deploy-prod
+  group: deploy-staging
   cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    if: github.event.release.target_commitish == 'main'
     steps:
-      - name: Deploy to Linode (production)
+      - name: Deploy to Linode (staging)
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.LINODE_HOST }}
@@ -24,6 +24,6 @@ jobs:
           key: ${{ secrets.LINODE_SSH_KEY }}
           script_stop: true
           script: |
-            cd /var/www/record
-            git fetch --tags origin
-            REF=${{ github.event.release.tag_name }} bash <(git show ${{ github.event.release.tag_name }}:deploy/deploy.sh) prod
+            cd /var/www/record-staging
+            git fetch origin staging
+            bash <(git show origin/staging:deploy/deploy.sh) staging
