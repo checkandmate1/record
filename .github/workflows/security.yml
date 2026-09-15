@@ -36,9 +36,15 @@ jobs:
     name: typecheck + build
     runs-on: ubuntu-latest
     env:
-      # Build-time placeholders — production env vars live elsewhere.
-      NEXT_PUBLIC_GOOGLE_CLIENT_ID: build-placeholder
-      AUTH_SECRET: build-placeholder-build-placeholder-build-pl=
+      # Build-time placeholders only — nothing here is used at runtime. Real values live in the
+      # server's .env (see deploy/README.md). Prisma does not open a connection until a query runs.
+      DATABASE_URL: postgresql://build:build@localhost:5432/build
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: build-placeholder-build-placeholder-build-pl=
+      GOOGLE_CLIENT_ID: build-placeholder
+      GOOGLE_CLIENT_SECRET: build-placeholder
+      AWS_REGION: us-east-1
+      AWS_S3_BUCKET: build-placeholder
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
