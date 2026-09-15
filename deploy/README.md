@@ -13,8 +13,9 @@ Two environments on one Linode box (`ssh linode`, root, IP 69.164.213.218), both
 | Deploy trigger | GitHub **release published** → `.github/workflows/deploy.yaml` | **push to `staging`** → `.github/workflows/deploy-staging.yaml` |
 | Env file | `/var/www/record/.env` (see `env.prod.example`) | `/var/www/record-staging/.env` (see `env.staging.example`) |
 
-Staging shares the AWS account, IAM user, KMS key and S3 bucket with prod. It has its own database,
-its own `NEXTAUTH_SECRET` and its own `ENCRYPTION_KEY` (blind-index pepper).
+Staging is isolated from prod: its own database, its own S3 bucket (`the-record-media-staging`), its own KMS
+key (`alias/the-record-articles-staging`), its own IAM user, and its own `NEXTAUTH_SECRET` and `ENCRYPTION_KEY`
+(blind-index pepper). Only the AWS account and the Google OAuth client are shared.
 
 ## Files in this directory
 
@@ -26,6 +27,8 @@ its own `NEXTAUTH_SECRET` and its own `ENCRYPTION_KEY` (blind-index pepper).
 | `ecosystem.config.js` | pm2 definitions for `record` and `record-staging`. |
 | `nginx/*.conf` | Server blocks; `provision.sh` copies them into `/etc/nginx/sites-available/`. |
 | `env.*.example` | Templates for each environment's `.env`. |
+| `aws-fixes.sh` | Prod AWS corrections from the 2026-09-15 audit (IAM KMS policy, orphan key, CORS, versioning, alarms). Run once from a laptop. |
+| `aws-staging.sh` | Creates the isolated staging AWS resources and prints the `.env` values. Run once from a laptop. |
 
 ## Fresh box: first-time setup
 
@@ -49,8 +52,11 @@ its own `NEXTAUTH_SECRET` and its own `ENCRYPTION_KEY` (blind-index pepper).
    ```
 5. **Google OAuth.** In Google Cloud Console add `https://recordstaging.mtrokel.org/api/auth/callback/google`
    as an authorised redirect URI on the existing client (prod's is already there).
-6. **AWS.** S3 CORS on `the-record-media` must list `https://recordstaging.mtrokel.org` as an allowed origin
-   (see `docs/aws-infrastructure.md`).
+6. **AWS.** From your laptop (as the admin IAM user):
+   ```bash
+   bash deploy/aws-fixes.sh     # prod corrections from the 2026-09-15 audit (incl. staging CORS origin)
+   bash deploy/aws-staging.sh   # isolated staging bucket + KMS key + IAM user; prints the .env values
+   ```
 7. **Deploy both:**
    ```bash
    bash /var/www/record/deploy/deploy.sh prod
