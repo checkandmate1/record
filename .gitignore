@@ -59,3 +59,6 @@ next-env.d.ts
 CLAUDE.md
 AGENTS.md
 .superpowers
+
+# lockdown-security scan output (local only)
+/lockdown
