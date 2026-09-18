@@ -25,7 +25,10 @@ if ! aws kms describe-key --key-id "$ALIAS" >/dev/null 2>&1; then
 fi
 KEY_ARN=$(aws kms describe-key --key-id "$ALIAS" --query KeyMetadata.Arn --output text)
 KEY_ID=$(aws kms describe-key --key-id "$ALIAS" --query KeyMetadata.KeyId --output text)
-aws kms put-key-policy --key-id "$KEY_ID" --policy-name default --policy "{
+# A freshly created IAM user takes a few seconds to become a valid principal (IAM is eventually
+# consistent); KMS rejects the policy with "invalid principals" until then, so retry.
+for attempt in $(seq 1 12); do
+  if aws kms put-key-policy --key-id "$KEY_ID" --policy-name default --policy "{
   \"Version\": \"2012-10-17\", \"Id\": \"the-record-articles-staging-key-policy\",
   \"Statement\": [
     {\"Sid\":\"EnableRootAccountAdmin\",\"Effect\":\"Allow\",\"Principal\":{\"AWS\":\"arn:aws:iam::$ACCT:root\"},\"Action\":\"kms:*\",\"Resource\":\"*\"},
@@ -35,7 +38,10 @@ aws kms put-key-policy --key-id "$KEY_ID" --policy-name default --policy "{
      \"Action\":[\"kms:GenerateDataKey\",\"kms:Decrypt\"],\"Resource\":\"*\",
      \"Condition\":{\"StringLike\":{\"kms:EncryptionContext:recordType\":\"*\",\"kms:EncryptionContext:recordId\":\"*\"}}},
     {\"Sid\":\"AllowAppToDescribeKey\",\"Effect\":\"Allow\",\"Principal\":{\"AWS\":\"arn:aws:iam::$ACCT:user/$USER\"},\"Action\":\"kms:DescribeKey\",\"Resource\":\"*\"}
-  ]}"
+  ]}" 2>/dev/null; then break; fi
+  [[ $attempt -eq 12 ]] && { echo "put-key-policy still failing after 60s — re-run the script in a minute" >&2; exit 1; }
+  echo "  waiting for IAM user to propagate ($attempt)…"; sleep 5
+done
 
 echo "== S3 bucket (same shape as the-record-media)"
 aws s3api head-bucket --bucket "$BUCKET" 2>/dev/null || aws s3api create-bucket --bucket "$BUCKET" --region us-east-1 >/dev/null
