@@ -35,6 +35,20 @@ jobs:
   typecheck-and-build:
     name: typecheck + build
     runs-on: ubuntu-latest
+    # next build prerenders pages that query Postgres (e.g. /about), so give it an empty database.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: build
+          POSTGRES_PASSWORD: build
+          POSTGRES_DB: build
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U build"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
       # Build-time placeholders only — nothing here is used at runtime. Real values live in the
       # server's .env (see deploy/README.md). Prisma does not open a connection until a query runs.
@@ -55,4 +69,6 @@ jobs:
       - name: Generate Prisma client (skipped if no Prisma)
         run: '[ -f prisma/schema.prisma ] && npx prisma generate || echo "no prisma, skipping"'
       - run: npx tsc --noEmit
+      - name: Apply migrations to the throwaway database
+        run: npx prisma migrate deploy
       - run: npm run build
