@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { ALL_ROLES } from "@/lib/roles";
+import { isS3Url } from "@/app/dashboard/group-schemas";
 
 // `z.string().url()` accepts `javascript:` and `data:` URLs which are dangerous in href/src contexts.
-// Restrict to http(s) by default; opt-in to `data:image/*` for fields like Article.featuredImage that
-// the dashboard form intentionally writes as base64 data URLs (see app/dashboard/CLAUDE.md).
+// Restrict to http(s) by default. (The `data:image/*` opt-in is no longer used by any schema —
+// featured images are S3 URLs now — but the branch stays so the rule is explicit.)
 function isAllowedUrl(value: string, allowDataImage: boolean): boolean {
   let parsed: URL;
   try {
@@ -26,15 +27,20 @@ const safeUrl = (allowDataImage = false) =>
       : "URL must use http(s) scheme",
   });
 
-// Cap featuredImage at ~1MB of characters. Comfortably fits typical hero-image data URLs but
-// rejects multi-MB base64 payloads that bloat Postgres rows.
-const FEATURED_IMAGE_MAX = 1_000_000;
+// Featured images live in S3 like every other upload (POST /api/upload → presigned PUT); the
+// column holds the resulting https URL, never the image bytes. Same host rule as slot media, so
+// a stored URL can only ever point at our own bucket.
+const FEATURED_IMAGE_URL_MAX = 2048;
+const featuredImageUrl = z
+  .string()
+  .max(FEATURED_IMAGE_URL_MAX, "Image URL must be 2048 characters or fewer")
+  .refine(isS3Url, "Featured image must be an https URL in the site's upload bucket");
 
 export const createArticleSchema = z.object({
   title: z.string().min(1).max(300),
   body: z.string().min(1).max(102400), // 100KB
   excerpt: z.string().max(500).optional(),
-  featuredImage: safeUrl(true).max(FEATURED_IMAGE_MAX).optional(),
+  featuredImage: featuredImageUrl.optional(),
   section: z.enum(["NEWS", "OPINIONS", "LIONS_DEN", "A_AND_E", "FEATURES", "THE_ROUNDTABLE", "MD_ALUMNI"]),
   groupId: z.string().uuid(),
   credits: z
@@ -154,10 +160,7 @@ export const articleActionSchema = z.object({
   title: z.string().min(1, "Title is required").max(300, "Title must be 300 characters or fewer"),
   body: z.string().min(1, "Body is required").max(102400, "Body must be under 100 KB"),
   section: z.enum(SECTION_VALUES),
-  featuredImage: safeUrl(true)
-    .max(FEATURED_IMAGE_MAX, "Image must be under 1 MB")
-    .nullable()
-    .optional(),
+  featuredImage: featuredImageUrl.nullable().optional(),
   credits: z
     .array(
       z.object({
