@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
+import { isDashboardRole } from "@/lib/roles";
 import { userMinimalNameSelect, userMinimalNameImageSelect } from "@/lib/prisma-selects";
 import { SubpageHeader } from "@/app/subpage-header";
 import { Footer } from "@/app/footer";
@@ -38,6 +40,10 @@ export default async function RoundTableIndexPage() {
     },
   })) as unknown as RoundTableData[];
 
+  // The drawer's "Intro Animation" block is a QA control, not something readers
+  // should see. Dashboard roles only.
+  const showIntroControls = isDashboardRole((await auth())?.user?.role);
+
   const latest = published[0] ?? null;
   const archive = published.slice(1);
 
@@ -66,7 +72,11 @@ export default async function RoundTableIndexPage() {
             />
 
             <div className="flex justify-end mb-6">
-              <PastRoundTablesPanel items={archive} currentSlug={latest.slug} />
+              <PastRoundTablesPanel
+                items={archive}
+                currentSlug={latest.slug}
+                showIntroControls={showIntroControls}
+              />
             </div>
 
             <RoundTableDisplay
