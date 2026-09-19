@@ -117,14 +117,28 @@ export default async function AboutPage() {
 function StaffCard({ user }: { user: StaffUser }) {
   const title = user.displayTitle ?? roleLabel(user.role);
   const avatar = user.image ?? user.googleImage;
+  // Staff with no picture get the initial-letter circle used on /profile/[id];
+  // `<img src={undefined}>` rendered a broken-image icon. The avatar is
+  // decorative here — the name is right below it — so `alt=""` keeps screen
+  // readers from announcing it twice.
+  const firstInitial = (user.name || "?").charAt(0).toUpperCase();
   return (
     <li className="flex flex-col items-center text-center w-[140px]">
       <Link href={`/profile/${user.id}`} className="group block">
-        <img
-          src={avatar ?? undefined}
-          alt={user.name}
-          className="w-[112px] h-[112px] rounded-full object-cover bg-neutral-200 transition-transform duration-200 group-hover:scale-[1.03]"
-        />
+        {avatar ? (
+          <img
+            src={avatar}
+            alt=""
+            className="w-[112px] h-[112px] rounded-full object-cover bg-neutral-200 transition-transform duration-200 group-hover:scale-[1.03]"
+          />
+        ) : (
+          <div
+            aria-hidden="true"
+            className="w-[112px] h-[112px] rounded-full bg-maroon text-white flex items-center justify-center font-headline font-bold text-[40px] transition-transform duration-200 group-hover:scale-[1.03]"
+          >
+            {firstInitial}
+          </div>
+        )}
         <p className="mt-3 font-headline text-[15px] font-semibold leading-tight text-ink group-hover:text-maroon transition-colors">
           {user.name}
         </p>
