@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { signOutAction } from "@/app/sign-out-action";
+import { isDashboardRole, isAdminRole, roleLabel } from "@/lib/roles";
 
 interface AccountDropdownProps {
   userName: string | null | undefined;
@@ -31,18 +32,7 @@ export function AccountDropdown({
   }, []);
 
   const firstInitial = userName?.charAt(0)?.toUpperCase() ?? "?";
-  const ROLE_DISPLAY: Record<string, string> = {
-    READER: "Reader",
-    WRITER: "Staff Writer",
-    DESIGNER: "Designer",
-    PHOTOGRAPHER: "Photographer",
-    ART_TEAM: "Art Team",
-    EDITOR: "Editor",
-    CHIEF_EDITOR: "Chief Editor",
-    WEB_TEAM: "Web Team",
-    WEB_MASTER: "Web Master",
-  };
-  const displayRole = ROLE_DISPLAY[userRole] ?? userRole;
+  const displayRole = roleLabel(userRole);
 
   return (
     <div ref={ref} className="relative">
@@ -95,10 +85,10 @@ export function AccountDropdown({
         {/* Links */}
         <nav className="py-1">
           <DropdownLink href="/account" label="Account Settings" onClick={() => setOpen(false)} open={open} delay={120} />
-          {["WRITER", "DESIGNER", "PHOTOGRAPHER", "ART_TEAM", "EDITOR", "CHIEF_EDITOR", "WEB_TEAM", "WEB_MASTER"].includes(userRole) && (
+          {isDashboardRole(userRole) && (
             <DropdownLink href="/dashboard" label="Dashboard" onClick={() => setOpen(false)} open={open} delay={170} />
           )}
-          {(userRole === "WEB_MASTER" || userRole === "WEB_TEAM") && (
+          {isAdminRole(userRole) && (
             <DropdownLink href="/admin" label="Admin Panel" onClick={() => setOpen(false)} open={open} delay={220} />
           )}
         </nav>

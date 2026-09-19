@@ -5,9 +5,7 @@ import { checkRole } from "@/lib/middleware/auth";
 import { updateArticleSchema } from "@/lib/validations";
 import { sanitizeHtml } from "@/lib/sanitize";
 import { errorResponse } from "@/lib/errors";
-
-// Roles allowed to mutate articles they do not own. Mirrors EDITOR_ROLES in app/dashboard/article-actions.ts.
-const EDITOR_ROLES = ["EDITOR", "CHIEF_EDITOR", "WEB_TEAM", "WEB_MASTER"] as const;
+import { isEditorRole } from "@/lib/roles";
 
 // Public-safe projection: drop email, isAdmin, googleImage, emailVerified, createdAt, updatedAt.
 const publicUserSelect = {
@@ -35,8 +33,7 @@ export async function GET(
   const { id } = await params;
   const session = await auth();
   const role = session?.user?.role;
-  const canSeeDrafts =
-    !!role && (EDITOR_ROLES as readonly string[]).includes(role);
+  const canSeeDrafts = isEditorRole(role);
 
   // Editors+ can fetch any article by id; everyone else only PUBLISHED, matching /api/articles
   // and /api/articles/by-slug behavior. Without this filter, any signed-in user could read drafts by id.
@@ -74,7 +71,7 @@ export async function PATCH(
   // Ownership-or-editor gate: writers may edit their own drafts; only EDITOR+ may edit others'.
   if (
     existing.createdById !== session.user.id &&
-    !(EDITOR_ROLES as readonly string[]).includes(session.user.role)
+    !isEditorRole(session.user.role)
   ) {
     return errorResponse("FORBIDDEN", "You can only modify your own articles", 403);
   }
@@ -140,7 +137,7 @@ export async function DELETE(
   // Ownership-or-editor gate: writers may delete their own drafts; only EDITOR+ may delete others'.
   if (
     existing.createdById !== session.user.id &&
-    !(EDITOR_ROLES as readonly string[]).includes(session.user.role)
+    !isEditorRole(session.user.role)
   ) {
     return errorResponse("FORBIDDEN", "You can only delete your own articles", 403);
   }

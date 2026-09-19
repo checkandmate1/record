@@ -6,8 +6,7 @@ import { SubpageHeader } from "@/app/subpage-header";
 import { ArticleForm } from "@/app/dashboard/article-form";
 import { createArticleInGroup } from "@/app/dashboard/article-actions";
 import { formatIssueTitle } from "@/lib/article-helpers";
-
-const DASHBOARD_ROLES = ["WRITER", "DESIGNER", "EDITOR", "WEB_TEAM", "WEB_MASTER"];
+import { isDashboardRole, roleLabel } from "@/lib/roles";
 
 export default async function NewArticleInGroupPage({
   params,
@@ -15,7 +14,7 @@ export default async function NewArticleInGroupPage({
   params: Promise<{ id: string }>;
 }) {
   const session = await auth();
-  if (!session?.user || !DASHBOARD_ROLES.includes(session.user.role ?? "")) redirect("/dashboard");
+  if (!session?.user || !isDashboardRole(session.user.role)) redirect("/dashboard");
 
   const { id } = await params;
 
@@ -32,19 +31,10 @@ export default async function NewArticleInGroupPage({
 
   if (!group) notFound();
 
-  const ROLE_DISPLAY: Record<string, string> = {
-    READER: "Reader",
-    WRITER: "Staff Writer",
-    DESIGNER: "Designer",
-    EDITOR: "Editor",
-    WEB_TEAM: "Web Team",
-    WEB_MASTER: "Web Master",
-  };
-
   const allUsers = rawUsers.map((u: (typeof rawUsers)[number]) => ({
     id: u.id,
     name: u.name ?? "",
-    defaultRole: (u as { displayTitle?: string | null }).displayTitle ?? ROLE_DISPLAY[u.role] ?? u.role,
+    defaultRole: (u as { displayTitle?: string | null }).displayTitle ?? roleLabel(u.role),
   }));
 
   const boundCreate = createArticleInGroup.bind(null, id);

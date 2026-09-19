@@ -3,15 +3,15 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { userMinimalNameSelect } from "@/lib/prisma-selects";
 import { AuthorsClient } from "@/app/admin/authors/authors-client";
+import { isAdminRole } from "@/lib/roles";
 
 // The admin layout already gates to WEB_TEAM+; this inline check is defense in depth (server
 // actions re-check too).
-const ADMIN_ROLES = ["WEB_TEAM", "WEB_MASTER"];
 
 export default async function AuthorsPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!ADMIN_ROLES.includes(session.user.role)) redirect("/");
+  if (!isAdminRole(session.user.role)) redirect("/");
 
   const rows = await prisma.user.findMany({
     where: { isPlaceholder: true },

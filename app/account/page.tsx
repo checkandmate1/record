@@ -3,15 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { SubpageHeader } from "@/app/subpage-header";
 import { ProfilePicture } from "@/app/account/profile-picture";
-
-const ROLE_LABELS: Record<string, string> = {
-  READER: "Reader",
-  WRITER: "Staff Writer",
-  DESIGNER: "Designer",
-  EDITOR: "Editor",
-  WEB_TEAM: "Web Team",
-  WEB_MASTER: "Web Master",
-};
+import { roleLabel } from "@/lib/roles";
 
 export default async function AccountPage() {
   const session = await auth();
@@ -66,7 +58,7 @@ export default async function AccountPage() {
 
         {/* Details */}
         <div className="mt-10 divide-y divide-neutral-200">
-          <DetailRow label="Role" value={ROLE_LABELS[user.role] ?? user.role} />
+          <DetailRow label="Role" value={roleLabel(user.role)} />
           <DetailRow label="Email" value={user.email ?? "\u2014"} />
           <DetailRow label="Member Since" value={joinDate} />
         </div>

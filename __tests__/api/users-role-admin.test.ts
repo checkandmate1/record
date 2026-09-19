@@ -1,5 +1,4 @@
 import { PATCH as updateRole } from "@/app/api/users/[id]/role/route";
-import { PATCH as updateAdmin } from "@/app/api/users/[id]/admin/route";
 import { NextRequest } from "next/server";
 
 jest.mock("@/lib/prisma", () => ({
@@ -20,9 +19,22 @@ const mockUpdate = prisma.user.update as jest.Mock;
 const mockCheckAdmin = checkAdmin as jest.Mock;
 
 const adminSession = {
-  session: { user: { id: "admin-1", isAdmin: true } },
+  session: { user: { id: "admin-1", role: "WEB_MASTER", isAdmin: true } },
   error: undefined,
 };
+
+const webTeamSession = {
+  session: { user: { id: "webteam-1", role: "WEB_TEAM", isAdmin: true } },
+  error: undefined,
+};
+
+function roleRequest(id: string, role: string) {
+  return new NextRequest(`http://localhost/api/users/${id}/role`, {
+    method: "PATCH",
+    body: JSON.stringify({ role }),
+    headers: { "Content-Type": "application/json" },
+  });
+}
 
 describe("PATCH /api/users/[id]/role", () => {
   beforeEach(() => jest.clearAllMocks());
@@ -32,51 +44,73 @@ describe("PATCH /api/users/[id]/role", () => {
     mockFindUnique.mockResolvedValue({ id: "user-1", role: "READER" });
     mockUpdate.mockResolvedValue({ id: "user-1", role: "EDITOR" });
 
-    const req = new NextRequest("http://localhost/api/users/user-1/role", {
-      method: "PATCH",
-      body: JSON.stringify({ role: "EDITOR" }),
-      headers: { "Content-Type": "application/json" },
+    const res = await updateRole(roleRequest("user-1", "EDITOR"), {
+      params: Promise.resolve({ id: "user-1" }),
     });
-    const res = await updateRole(req, { params: Promise.resolve({ id: "user-1" }) });
 
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.role).toBe("EDITOR");
   });
-});
 
-describe("PATCH /api/users/[id]/admin", () => {
-  beforeEach(() => jest.clearAllMocks());
-
-  it("toggles admin status", async () => {
+  it("accepts the newer roles (PHOTOGRAPHER, ART_TEAM, CHIEF_EDITOR)", async () => {
     mockCheckAdmin.mockResolvedValue(adminSession);
-    mockFindUnique.mockResolvedValue({ id: "user-1", isAdmin: false });
-    mockUpdate.mockResolvedValue({ id: "user-1", isAdmin: true });
+    mockFindUnique.mockResolvedValue({ id: "user-1", role: "READER" });
+    mockUpdate.mockResolvedValue({ id: "user-1", role: "CHIEF_EDITOR" });
 
-    const req = new NextRequest("http://localhost/api/users/user-1/admin", {
-      method: "PATCH",
-      body: JSON.stringify({ isAdmin: true }),
-      headers: { "Content-Type": "application/json" },
+    const res = await updateRole(roleRequest("user-1", "CHIEF_EDITOR"), {
+      params: Promise.resolve({ id: "user-1" }),
     });
-    const res = await updateAdmin(req, { params: Promise.resolve({ id: "user-1" }) });
 
     expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.isAdmin).toBe(true);
   });
 
-  it("prevents admin from toggling their own admin status", async () => {
+  it("prevents admin from changing their own role", async () => {
     mockCheckAdmin.mockResolvedValue(adminSession);
 
-    const req = new NextRequest("http://localhost/api/users/admin-1/admin", {
-      method: "PATCH",
-      body: JSON.stringify({ isAdmin: false }),
-      headers: { "Content-Type": "application/json" },
+    const res = await updateRole(roleRequest("admin-1", "READER"), {
+      params: Promise.resolve({ id: "admin-1" }),
     });
-    const res = await updateAdmin(req, { params: Promise.resolve({ id: "admin-1" }) });
 
     expect(res.status).toBe(400);
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 when WEB_TEAM tries to grant WEB_MASTER", async () => {
+    mockCheckAdmin.mockResolvedValue(webTeamSession);
+    mockFindUnique.mockResolvedValue({ id: "user-1", role: "EDITOR" });
+
+    const res = await updateRole(roleRequest("user-1", "WEB_MASTER"), {
+      params: Promise.resolve({ id: "user-1" }),
+    });
+
+    expect(res.status).toBe(403);
     const body = await res.json();
-    expect(body.error.message).toContain("your own");
+    expect(body.error.code).toBe("FORBIDDEN");
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 when WEB_TEAM tries to demote a WEB_MASTER", async () => {
+    mockCheckAdmin.mockResolvedValue(webTeamSession);
+    mockFindUnique.mockResolvedValue({ id: "user-1", role: "WEB_MASTER" });
+
+    const res = await updateRole(roleRequest("user-1", "READER"), {
+      params: Promise.resolve({ id: "user-1" }),
+    });
+
+    expect(res.status).toBe(403);
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it("lets WEB_TEAM move a non-admin user between non-admin roles", async () => {
+    mockCheckAdmin.mockResolvedValue(webTeamSession);
+    mockFindUnique.mockResolvedValue({ id: "user-1", role: "READER" });
+    mockUpdate.mockResolvedValue({ id: "user-1", role: "EDITOR" });
+
+    const res = await updateRole(roleRequest("user-1", "EDITOR"), {
+      params: Promise.resolve({ id: "user-1" }),
+    });
+
+    expect(res.status).toBe(200);
   });
 });

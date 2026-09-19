@@ -7,18 +7,16 @@ import { generateUniqueRoundTableSlug } from "@/lib/slugify";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { invalidateHomepage } from "@/lib/page-cache";
-
-const DASHBOARD_ROLES = ["WRITER", "DESIGNER", "PHOTOGRAPHER", "ART_TEAM", "EDITOR", "CHIEF_EDITOR", "WEB_TEAM", "WEB_MASTER"];
-const EDITOR_ROLES = ["EDITOR", "CHIEF_EDITOR", "WEB_TEAM", "WEB_MASTER"];
+import { isDashboardRole, isEditorRole } from "@/lib/roles";
 
 function requireDashboardRole(session: { user?: { role?: string } } | null) {
-  if (!session?.user?.role || !DASHBOARD_ROLES.includes(session.user.role)) {
+  if (!isDashboardRole(session?.user?.role)) {
     throw new Error("Dashboard access required");
   }
 }
 
 function requireEditor(session: { user?: { role?: string } } | null) {
-  if (!session?.user?.role || !EDITOR_ROLES.includes(session.user.role)) {
+  if (!isEditorRole(session?.user?.role)) {
     throw new Error("Editor access required");
   }
 }

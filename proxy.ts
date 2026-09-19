@@ -1,22 +1,10 @@
 import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { rateLimit } from "@/lib/rate-limit";
+import { isDashboardRole, isEditorRole, isAdminRole } from "@/lib/roles";
 
 const publicLimiter = rateLimit({ maxRequests: 60, windowMs: 60000 });
 const authLimiter = rateLimit({ maxRequests: 120, windowMs: 60000 });
-
-const DASHBOARD_ROLES = [
-  "WRITER",
-  "DESIGNER",
-  "PHOTOGRAPHER",
-  "ART_TEAM",
-  "EDITOR",
-  "CHIEF_EDITOR",
-  "WEB_TEAM",
-  "WEB_MASTER",
-];
-const EDITOR_ROLES = ["EDITOR", "CHIEF_EDITOR", "WEB_TEAM", "WEB_MASTER"];
-const ADMIN_ROLES = ["WEB_MASTER", "WEB_TEAM"];
 
 export default auth((req) => {
   const { pathname, search } = req.nextUrl;
@@ -87,21 +75,21 @@ export default auth((req) => {
 
   // Dashboard routes require a dashboard role
   if (pathname.startsWith("/dashboard")) {
-    if (!role || !DASHBOARD_ROLES.includes(role)) {
+    if (!isDashboardRole(role)) {
       return NextResponse.redirect(new URL("/", req.url));
     }
   }
 
   // Group creation and settings require editor or above
   if (pathname.match(/^\/dashboard\/groups\/new/) || pathname.match(/^\/dashboard\/groups\/[^/]+\/settings/)) {
-    if (!role || !EDITOR_ROLES.includes(role)) {
+    if (!isEditorRole(role)) {
       return NextResponse.redirect(new URL("/dashboard", req.url));
     }
   }
 
   // Admin routes require web team
   if (pathname.startsWith("/admin")) {
-    if (!role || !ADMIN_ROLES.includes(role)) {
+    if (!isAdminRole(role)) {
       return NextResponse.redirect(new URL("/", req.url));
     }
   }

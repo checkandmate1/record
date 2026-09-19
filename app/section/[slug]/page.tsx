@@ -5,6 +5,7 @@ import { userMinimalNameSelect } from "@/lib/prisma-selects";
 import { Section } from "@prisma/client";
 import { SubpageHeader } from "@/app/subpage-header";
 import { Footer } from "@/app/footer";
+import { roleLabel } from "@/lib/roles";
 
 const SLUG_TO_SECTION: Record<string, { label: string; fullLabel?: string; dbKey: string }> = {
   news: { label: "News", dbKey: "NEWS" },
@@ -29,15 +30,6 @@ interface ArticleData {
   images: { url: string; caption: string | null; altText: string }[];
   group: { publishedAt: Date | null } | null;
 }
-
-const ROLE_DISPLAY: Record<string, string> = {
-  READER: "Reader",
-  WRITER: "Staff Writer",
-  DESIGNER: "Designer",
-  EDITOR: "Editor",
-  WEB_TEAM: "Web Team",
-  WEB_MASTER: "Web Master",
-};
 
 function formatDateLong(date: Date): string {
   return date.toLocaleDateString("en-US", {
@@ -78,7 +70,7 @@ function getAuthorInfo(article: ArticleData): { name: string; role: string | nul
   }
   return {
     name: article.createdBy.name,
-    role: hideReader(article.createdBy.displayTitle ?? ROLE_DISPLAY[article.createdBy.role] ?? article.createdBy.role),
+    role: hideReader(article.createdBy.displayTitle ?? roleLabel(article.createdBy.role)),
     id: article.createdBy.id,
   };
 }

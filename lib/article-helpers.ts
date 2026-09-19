@@ -1,3 +1,5 @@
+import { roleLabel } from "@/lib/roles";
+
 export function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, "").trim();
 }
@@ -66,18 +68,7 @@ export function getBylineAuthors(article: {
     const role = article.credits[0]!.creditRole ?? "";
     return { authors, primaryRole: role === "Reader" || role === "" ? null : role };
   }
-  const ROLE_DISPLAY: Record<string, string> = {
-    READER: "Reader",
-    WRITER: "Staff Writer",
-    DESIGNER: "Designer",
-    EDITOR: "Editor",
-    WEB_TEAM: "Web Team",
-    WEB_MASTER: "Web Master",
-  };
-  const fallback =
-    article.createdBy.displayTitle ??
-    ROLE_DISPLAY[article.createdBy.role] ??
-    article.createdBy.role;
+  const fallback = article.createdBy.displayTitle ?? roleLabel(article.createdBy.role);
   return {
     authors: [{ id: article.createdBy.id, name: article.createdBy.name ?? "" }],
     primaryRole: fallback === "Reader" ? null : fallback,
@@ -112,13 +103,9 @@ export function getAuthorInfo(article: {
     const primary = article.credits[0];
     return { name: primary.user.name, role: hideReader(primary.creditRole), id: primary.user.id };
   }
-  const ROLE_DISPLAY: Record<string, string> = {
-    READER: "Reader", WRITER: "Staff Writer", DESIGNER: "Designer",
-    EDITOR: "Editor", WEB_TEAM: "Web Team", WEB_MASTER: "Web Master",
-  };
   return {
     name: article.createdBy.name,
-    role: hideReader(article.createdBy.displayTitle ?? ROLE_DISPLAY[article.createdBy.role] ?? article.createdBy.role),
+    role: hideReader(article.createdBy.displayTitle ?? roleLabel(article.createdBy.role)),
     id: article.createdBy.id,
   };
 }

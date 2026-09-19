@@ -12,15 +12,7 @@ import {
   formatDateShort,
   getPreviewText,
 } from "@/lib/article-helpers";
-
-const ROLE_DISPLAY: Record<string, string> = {
-  READER: "Reader",
-  WRITER: "Staff Writer",
-  DESIGNER: "Designer",
-  EDITOR: "Editor",
-  WEB_TEAM: "Web Team",
-  WEB_MASTER: "Web Master",
-};
+import { roleLabel } from "@/lib/roles";
 
 interface ArticleData {
   id: string;
@@ -55,7 +47,7 @@ function resolvePrimaryRole(a: ArticleData): string | null {
     const role = a.credits[0].creditRole;
     return role === "Reader" ? null : role;
   }
-  const fallback = a.createdBy.displayTitle ?? ROLE_DISPLAY[a.createdBy.role] ?? a.createdBy.role;
+  const fallback = a.createdBy.displayTitle ?? roleLabel(a.createdBy.role);
   return fallback === "Reader" ? null : fallback;
 }
 

@@ -5,13 +5,12 @@ import { prisma } from "@/lib/prisma";
 import { getDirectoryUserByEmail } from "@/lib/google-directory";
 import { revalidatePath } from "next/cache";
 import { randomUUID } from "crypto";
+import { isAdminRole } from "@/lib/roles";
 
 // Creating authors is a WEB_TEAM+ (admin-panel) action. Writers can still credit existing
 // placeholder authors via the article credit picker; they just can't mint new ones.
-const ADMIN_ROLES = ["WEB_TEAM", "WEB_MASTER"];
-
 function requireWebTeam(session: { user?: { role?: string } } | null) {
-  if (!session?.user?.role || !ADMIN_ROLES.includes(session.user.role)) {
+  if (!isAdminRole(session?.user?.role)) {
     throw new Error("Web team access required");
   }
 }

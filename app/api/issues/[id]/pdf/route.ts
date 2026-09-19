@@ -3,17 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getS3ObjectStream } from "@/lib/s3";
 import { errorResponse } from "@/lib/errors";
-
-const DASHBOARD_ROLES = [
-  "WRITER",
-  "DESIGNER",
-  "PHOTOGRAPHER",
-  "ART_TEAM",
-  "EDITOR",
-  "CHIEF_EDITOR",
-  "WEB_TEAM",
-  "WEB_MASTER",
-];
+import { isDashboardRole } from "@/lib/roles";
 
 export async function GET(
   _req: NextRequest,
@@ -43,7 +33,7 @@ export async function GET(
 
   // Visibility gate. PUBLISHED → any HM user. DRAFT/ARCHIVED → only dashboard roles
   // (WRITER+) so editors can preview before publish.
-  if (group.status !== "PUBLISHED" && !DASHBOARD_ROLES.includes(session.user.role)) {
+  if (group.status !== "PUBLISHED" && !isDashboardRole(session.user.role)) {
     return errorResponse("FORBIDDEN", "This issue is not yet published", 403);
   }
 
