@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useEditorContext } from "@/app/patterns/editor-context";
 import { PopulatedSlot, SlotArticle } from "@/app/patterns/types";
+import { parseCropRatio } from "@/app/patterns/crop";
 import {
   assignToBlockSlot,
   assignMediaToBlockSlot,
@@ -39,25 +40,6 @@ const SECTION_LABELS: Record<string, string> = {
 // Re-exported from a server-safe module so server-component patterns can call them.
 // The actual definitions live in app/patterns/placeholder.ts (no "use client").
 export { PLACEHOLDER_BODY, getPlaceholderArticle } from "@/app/patterns/placeholder";
-
-/* ------------------------------------------------------------------ */
-/*  Crop ratio helper                                                  */
-/* ------------------------------------------------------------------ */
-
-const CROP_RATIOS: Record<string, number | null> = {
-  original: null,
-  landscape: 16 / 9,
-  portrait: 3 / 4,
-  square: 1,
-};
-
-function parseCropRatio(crop: string, custom: string | null): number | null {
-  if (crop === "custom" && custom) {
-    const [w, h] = custom.split(":").map(Number);
-    if (w > 0 && h > 0) return w / h;
-  }
-  return CROP_RATIOS[crop] ?? null;
-}
 
 /* ------------------------------------------------------------------ */
 /*  CogButton                                                          */
@@ -954,7 +936,7 @@ export function EditableImage({
   const cogRef = useRef<HTMLButtonElement>(null);
   const [pvLen, setPvLen] = useState(Number(slot.previewLength) || 200);
   const [imgWidth, setImgWidth] = useState(slot.imageWidth ?? 100);
-  const cropRatio = parseCropRatio(slot.imageCrop ?? "original", slot.imageCropCustom ?? null);
+  const cropRatio = parseCropRatio(slot.imageCrop, slot.imageCropCustom);
   const isMediaSlot = slot.slotRole === "image" || slot.slotRole === "media";
   const displayCredit = credit ?? slot.mediaCredit ?? null;
 

@@ -8,6 +8,7 @@ import {
   EditableImage,
   EditableImagePlaceholder,
 } from "@/app/patterns/editable";
+import { cropRatioClass } from "@/app/patterns/crop";
 import { getPlaceholderArticle } from "@/app/patterns/placeholder";
 
 export function SbTwoSmallPattern({
@@ -26,16 +27,7 @@ export function SbTwoSmallPattern({
         const article = slot?.article ?? getPlaceholderArticle();
         const { authors, primaryRole } = getBylineAuthors(article);
         const imgSrc = slot?.mediaUrl ?? null;
-        const cropRatio =
-          slot?.imageCrop === "landscape"
-            ? "16/9"
-            : slot?.imageCrop === "portrait"
-              ? "3/4"
-              : slot?.imageCrop === "square"
-                ? "1/1"
-                : slot?.imageCrop === "custom" && slot?.imageCropCustom
-                  ? slot.imageCropCustom.replace(":", "/")
-                  : undefined;
+        const cropRatio = cropRatioClass(slot?.imageCrop, slot?.imageCropCustom);
         return (
           <div key={slot?.id ?? idx} className="flex-1">
             {imgSrc ? (

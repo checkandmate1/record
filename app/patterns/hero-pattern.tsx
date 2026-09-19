@@ -13,6 +13,7 @@ import {
   EditableImage,
   EditableImagePlaceholder,
 } from "@/app/patterns/editable";
+import { cropRatioClass } from "@/app/patterns/crop";
 import { getPlaceholderArticle } from "@/app/patterns/placeholder";
 
 export function HeroPattern({
@@ -34,17 +35,7 @@ export function HeroPattern({
   const { authors, primaryRole } = getBylineAuthors(article);
   const fs = featuredSlot?.scale;
 
-  const imgCrop = imageSlot?.imageCrop ?? "original";
-  const cropRatio =
-    imgCrop === "landscape"
-      ? "16/9"
-      : imgCrop === "portrait"
-        ? "3/4"
-        : imgCrop === "square"
-          ? "1/1"
-          : imgCrop === "custom" && imageSlot?.imageCropCustom
-            ? imageSlot.imageCropCustom.replace(":", "/")
-            : undefined;
+  const cropRatio = cropRatioClass(imageSlot?.imageCrop, imageSlot?.imageCropCustom);
 
   return (
     <div>

@@ -6,6 +6,7 @@ import {
   EditableImage,
   EditableImagePlaceholder,
 } from "@/app/patterns/editable";
+import { cropRatioClass } from "@/app/patterns/crop";
 import { getPlaceholderArticle } from "@/app/patterns/placeholder";
 
 export function SbThumbnailsPattern({
@@ -24,16 +25,7 @@ export function SbThumbnailsPattern({
         const article = slot?.article ?? getPlaceholderArticle();
         const imgSrc = slot?.mediaUrl ?? null;
         const thumbSize = scalePx(40, slot?.imageScale);
-        const cropRatio =
-          slot?.imageCrop === "landscape"
-            ? "16/9"
-            : slot?.imageCrop === "portrait"
-              ? "3/4"
-              : slot?.imageCrop === "square"
-                ? "1/1"
-                : slot?.imageCrop === "custom" && slot?.imageCropCustom
-                  ? slot.imageCropCustom.replace(":", "/")
-                  : undefined;
+        const cropRatio = cropRatioClass(slot?.imageCrop, slot?.imageCropCustom);
         return (
           <div
             key={slot?.id ?? idx}

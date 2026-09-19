@@ -8,6 +8,7 @@ import {
   EditableImage,
   EditableImagePlaceholder,
 } from "@/app/patterns/editable";
+import { cropRatioClass } from "@/app/patterns/crop";
 import { getPlaceholderArticle } from "@/app/patterns/placeholder";
 
 export function FourGridPattern({
@@ -89,16 +90,7 @@ export function FourGridPattern({
         const { authors, primaryRole } = getBylineAuthors(article);
         const imgSrc = slot?.mediaUrl ?? null;
         const imgSize = scalePx(60, slot?.imageScale);
-        const cropRatio =
-          slot?.imageCrop === "landscape"
-            ? "16/9"
-            : slot?.imageCrop === "portrait"
-              ? "3/4"
-              : slot?.imageCrop === "square"
-                ? "1/1"
-                : slot?.imageCrop === "custom" && slot?.imageCropCustom
-                  ? slot.imageCropCustom.replace(":", "/")
-                  : undefined;
+        const cropRatio = cropRatioClass(slot?.imageCrop, slot?.imageCropCustom);
         return (
           <div key={slot?.id ?? `bottom-${idx}`} className="flex items-start gap-3">
             {imgSrc ? (
