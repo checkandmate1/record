@@ -35,6 +35,9 @@ export function LayoutToolbar({ groupId, groupName, opacity, onOpacityChange }: 
             <button
               type="button"
               onClick={() => setSettingsOpen(!settingsOpen)}
+              aria-label="Editor settings"
+              aria-expanded={settingsOpen}
+              aria-controls={`${opacityId}-panel`}
               className="cursor-pointer text-white/70 hover:text-white transition-colors p-1"
               title="Settings"
             >
@@ -45,7 +48,10 @@ export function LayoutToolbar({ groupId, groupName, opacity, onOpacityChange }: 
             </button>
 
             {settingsOpen && (
-              <div className="absolute right-0 top-full mt-2 bg-white text-ink border border-neutral-200 shadow-[0_4px_16px_rgba(0,0,0,0.12)] p-4 w-[220px] z-50">
+              <div
+                id={`${opacityId}-panel`}
+                className="absolute right-0 top-full mt-2 bg-white text-ink border border-neutral-200 shadow-[0_4px_16px_rgba(0,0,0,0.12)] p-4 w-[220px] z-50"
+              >
                 <p className="font-headline text-[12px] font-semibold tracking-[0.06em] uppercase text-caption mb-3">
                   Editor Settings
                 </p>

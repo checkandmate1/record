@@ -163,6 +163,7 @@ export function RoundTableForm({
                             type="button"
                             onClick={() => removeSideAuthor(i, uid)}
                             className="cursor-pointer text-caption/40 hover:text-maroon transition-colors text-[18px] px-1"
+                            aria-label={`Remove ${u.name} from side ${i + 1}`}
                             title="Remove author"
                           >
                             &times;
@@ -222,6 +223,7 @@ export function RoundTableForm({
                         type="button"
                         onClick={removeLastTurn}
                         className="cursor-pointer text-caption/40 hover:text-maroon transition-colors text-[18px] px-2"
+                        aria-label="Remove last turn"
                         title="Remove last turn"
                       >
                         &times;
