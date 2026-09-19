@@ -11,6 +11,9 @@ import { deleteS3Object, getS3ObjectHead } from "@/lib/s3";
 import { parseIssuePdfKey } from "@/lib/validations";
 import {
   dividerStyleSchema,
+  imageCropCustomSchema,
+  imageCropSchema,
+  imageFloatSchema,
   mediaCreditSchema,
   parseOrThrow,
   slotMediaSchema,
@@ -434,20 +437,21 @@ export async function reorderBlocks(groupId: string, column: string, blockIds: s
   requireDashboardRole(session);
   await requireGroupMutable(groupId, session);
 
-  // One transaction, each update scoped to the group *and* the column, so a stale or
-  // forged id list can't renumber blocks that belong somewhere else. If any id misses,
-  // the whole reorder rolls back.
-  const results = await prisma.$transaction(
-    blockIds.map((id, i) =>
-      prisma.layoutBlock.updateMany({
+  // One *interactive* transaction, each update scoped to the group and the column, so a
+  // stale or forged id list can't renumber blocks that belong somewhere else. The throw
+  // has to happen inside the callback: `updateMany` matching nothing is not an error, and
+  // the array form of `$transaction` would already have committed by the time we counted.
+  await prisma.$transaction(async (tx) => {
+    for (const [i, id] of blockIds.entries()) {
+      const { count } = await tx.layoutBlock.updateMany({
         where: { id, groupId, column },
         data: { order: i },
-      }),
-    ),
-  );
-  if (results.some((r) => r.count === 0)) {
-    throw new Error("A block in that order is not part of this issue");
-  }
+      });
+      if (count === 0) {
+        throw new Error("A block in that order is not part of this issue");
+      }
+    }
+  });
 
   revalidatePath(`/dashboard/groups/${groupId}`);
   revalidatePath("/");
@@ -620,9 +624,9 @@ export async function updateImageFloat(slotId: string, imageFloat: string, group
   requireDashboardRole(session);
   await requireGroupMutable(groupId, session);
 
-  if (!["left", "right", "full"].includes(imageFloat)) throw new Error("Invalid imageFloat");
-
-  await updateSlotInGroup(slotId, groupId, { imageFloat });
+  await updateSlotInGroup(slotId, groupId, {
+    imageFloat: parseOrThrow(imageFloatSchema, imageFloat, "image float"),
+  });
 
   revalidatePath(`/dashboard/groups/${groupId}`);
   revalidatePath(`/dashboard/groups/${groupId}/layout`);
@@ -649,12 +653,12 @@ export async function updateImageCrop(slotId: string, imageCrop: string, imageCr
   requireDashboardRole(session);
   await requireGroupMutable(groupId, session);
 
-  if (!["original", "landscape", "portrait", "square", "custom"].includes(imageCrop)) throw new Error("Invalid imageCrop");
+  const crop = parseOrThrow(imageCropSchema, imageCrop, "image crop");
+  const custom = parseOrThrow(imageCropCustomSchema, imageCropCustom ?? null, "crop ratio");
 
   await updateSlotInGroup(slotId, groupId, {
-    imageCrop,
-    imageCropCustom:
-      imageCrop === "custom" && imageCropCustom ? String(imageCropCustom).slice(0, 20) : null,
+    imageCrop: crop,
+    imageCropCustom: crop === "custom" ? custom : null,
   });
 
   revalidatePath(`/dashboard/groups/${groupId}`);

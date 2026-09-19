@@ -47,6 +47,8 @@ import {
   reorderBlocks,
   scheduleGroup,
   updateDividerStyle,
+  updateImageCrop,
+  updateImageFloat,
   updateMediaCredit,
   updateSlotScale,
 } from "@/app/dashboard/group-actions";
@@ -319,6 +321,38 @@ describe("updateDividerStyle / updateMediaCredit validation", () => {
   });
 });
 
+describe("image float / crop validation", () => {
+  it("rejects an unknown float", async () => {
+    await expect(updateImageFloat("s1", "sideways", "g1")).rejects.toThrow(/image float/i);
+    expect(db.blockSlot.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unknown crop", async () => {
+    await expect(updateImageCrop("s1", "hexagon", null, "g1")).rejects.toThrow(/image crop/i);
+    expect(db.blockSlot.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("rejects an over-long custom ratio", async () => {
+    await expect(updateImageCrop("s1", "custom", "9".repeat(21), "g1")).rejects.toThrow(
+      /crop ratio/i,
+    );
+  });
+
+  it("keeps the custom ratio only for the custom crop", async () => {
+    await updateImageCrop("s1", "custom", "16:9", "g1");
+    expect(db.blockSlot.updateMany).toHaveBeenLastCalledWith({
+      where: { id: "s1", block: { groupId: "g1" } },
+      data: { imageCrop: "custom", imageCropCustom: "16:9" },
+    });
+
+    await updateImageCrop("s1", "square", "16:9", "g1");
+    expect(db.blockSlot.updateMany).toHaveBeenLastCalledWith({
+      where: { id: "s1", block: { groupId: "g1" } },
+      data: { imageCrop: "square", imageCropCustom: null },
+    });
+  });
+});
+
 /* ------------------------------------------------------------------ */
 /* 4. Atomic reorder / add                                              */
 /* ------------------------------------------------------------------ */
@@ -338,9 +372,37 @@ describe("atomic block ordering", () => {
     });
   });
 
-  it("rejects a reorder that names a block outside the group", async () => {
-    db.layoutBlock.updateMany.mockResolvedValue({ count: 0 });
-    await expect(reorderBlocks("g1", "main", ["b-other"])).rejects.toThrow(/this issue/i);
+  it("commits nothing when one id is outside the group", async () => {
+    // Model transaction semantics: writes made inside the callback only "commit" if the
+    // callback resolves. `updateMany` matching zero rows does not reject on its own, so
+    // the action has to throw *inside* the transaction for the rollback to happen.
+    const committed: unknown[] = [];
+    db.layoutBlock.updateMany.mockImplementation(
+      async ({ where }: { where: { id: string } }) => ({ count: where.id === "b-bogus" ? 0 : 1 }),
+    );
+    // `Once`, so the shared mock from the module factory is back for the next test.
+    db.$transaction.mockImplementationOnce(async (arg: unknown) => {
+      const staged: unknown[] = [];
+      const tx = {
+        layoutBlock: {
+          updateMany: async (args: unknown) => {
+            staged.push(args);
+            return db.layoutBlock.updateMany(args);
+          },
+        },
+      };
+      const result = await (arg as (t: typeof tx) => Promise<unknown>)(tx);
+      committed.push(...staged);
+      return result;
+    });
+
+    await expect(reorderBlocks("g1", "main", ["b1", "b-bogus", "b2"])).rejects.toThrow(
+      /this issue/i,
+    );
+
+    expect(committed).toEqual([]);
+    // It stopped at the bad id — the third block was never touched.
+    expect(db.layoutBlock.updateMany).toHaveBeenCalledTimes(2);
   });
 
   it("computes the next order inside the transaction", async () => {

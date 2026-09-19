@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   addBlock,
@@ -190,8 +190,14 @@ export function LayoutBuilder({
   const [busy, startTransition] = useTransition();
   const router = useRouter();
 
+  // `busy` only updates on the next render, so two clicks dispatched in the same tick
+  // would both read `false`. The ref flips synchronously and is the real lock; `busy`
+  // just drives the disabled/"Saving…" chrome.
+  const inFlight = useRef(false);
+
   const run: RunAction = (fn) => {
-    if (busy) return;
+    if (inFlight.current) return;
+    inFlight.current = true;
     setError(null);
     startTransition(async () => {
       try {
@@ -199,6 +205,8 @@ export function LayoutBuilder({
         router.refresh();
       } catch (e) {
         setError(e instanceof Error ? e.message : "That change could not be saved.");
+      } finally {
+        inFlight.current = false;
       }
     });
   };

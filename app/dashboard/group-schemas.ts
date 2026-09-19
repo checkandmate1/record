@@ -15,6 +15,15 @@ export const DIVIDER_STYLES = ["light", "bold", "none"] as const;
 /** Scales understood by `lib/scale.ts`. */
 export const SLOT_SCALES = ["S", "M", "L", "XL"] as const;
 
+/** How a slot image sits in its column (`BlockSlot.imageFloat`). */
+export const IMAGE_FLOATS = ["left", "right", "full"] as const;
+
+/** Aspect-ratio presets for a slot image (`BlockSlot.imageCrop`). */
+export const IMAGE_CROPS = ["original", "landscape", "portrait", "square", "custom"] as const;
+
+/** `imageCropCustom` holds a ratio like "16:9" — nothing longer is meaningful. */
+export const IMAGE_CROP_CUSTOM_MAX = 20;
+
 /** Upper bound for the free-text fields attached to slot media. */
 export const MEDIA_TEXT_MAX = 300;
 
@@ -55,6 +64,9 @@ export function isS3Url(url: string): boolean {
 
 export const dividerStyleSchema = z.enum(DIVIDER_STYLES);
 export const slotScaleSchema = z.enum(SLOT_SCALES);
+export const imageFloatSchema = z.enum(IMAGE_FLOATS);
+export const imageCropSchema = z.enum(IMAGE_CROPS);
+export const imageCropCustomSchema = z.string().max(IMAGE_CROP_CUSTOM_MAX).nullable();
 export const mediaCreditSchema = z.string().max(MEDIA_TEXT_MAX);
 
 export const slotMediaSchema = z.object({
