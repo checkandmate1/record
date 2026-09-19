@@ -6,7 +6,10 @@ export async function getSiteVolumeAndIssue(): Promise<{
 }> {
   const latest = await prisma.articleGroup.findFirst({
     where: { status: "PUBLISHED" },
-    orderBy: [{ volumeNumber: "desc" }, { issueNumber: "desc" }],
+    orderBy: [
+      { volumeNumber: { sort: "desc", nulls: "last" } },
+      { issueNumber: { sort: "desc", nulls: "last" } },
+    ],
     select: { volumeNumber: true, issueNumber: true },
   });
 
