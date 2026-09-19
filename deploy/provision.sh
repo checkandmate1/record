@@ -7,7 +7,8 @@
 # Prereqs you must do by hand first:
 #   - DNS: record.mtrokel.org and recordstaging.mtrokel.org → this box's IP (Cloudflare, proxied)
 #   - Cloudflare SSL mode "Full (strict)" for both hostnames
-#   - Postgres: either local (installed below) or a managed DATABASE_URL in each .env
+#   - Postgres: local (installed below; the role password is generated and written into both .env
+#     files) or a managed DATABASE_URL you set in each .env afterwards
 set -euo pipefail
 [[ $EUID -eq 0 ]] || { echo "run as root" >&2; exit 1; }
 export DEBIAN_FRONTEND=noninteractive
@@ -53,13 +54,20 @@ for pair in "record:main" "record-staging:staging"; do
   chmod 600 "$dir/.env" 2>/dev/null || true
 done
 
-log "postgres: staging database"
+log "postgres: role + databases"
 if systemctl is-active --quiet postgresql; then
-  sudo -u postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname='record'" | grep -q 1 || \
-    sudo -u postgres psql -c "CREATE ROLE record LOGIN PASSWORD '$(openssl rand -hex 16)';" && \
-    echo "!! created role 'record' with a random password — put the real DATABASE_URL in each .env"
+  if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='record'" | grep -q 1; then
+    DB_PW=$(openssl rand -hex 24)
+    sudo -u postgres psql -qc "CREATE ROLE record LOGIN PASSWORD '$DB_PW';"
+    # Write the generated password straight into each checkout's .env so it is never lost.
+    for pair in "record:record" "record-staging:record_staging"; do
+      envf="/var/www/${pair%%:*}/.env"; db="${pair##*:}"
+      [[ -f "$envf" ]] && sed -i "s#^DATABASE_URL=.*#DATABASE_URL=postgresql://record:${DB_PW}@localhost:5432/${db}#" "$envf"
+    done
+    echo "created role 'record'; DATABASE_URL written into both .env files"
+  fi
   for db in record record_staging; do
-    sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='$db'" | grep -q 1 || \
+    sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='$db'" | grep -q 1 || \
       sudo -u postgres createdb -O record "$db"
   done
 fi
