@@ -292,8 +292,16 @@ export default async function ArticlePage({
             )}
           </p>
 
-          {/* Mini author card */}
-          <div className="mt-10 flex items-start gap-4 pt-6 border-t border-neutral-200">
+          {/* Mini author card. The sr-only h2 gives the page an h1 -> h2 outline
+              instead of an h1 and nothing else. `sr-only` is absolutely
+              positioned, so it does not take part in the flex row. */}
+          <section
+            aria-labelledby="article-author-heading"
+            className="mt-10 flex items-start gap-4 pt-6 border-t border-neutral-200"
+          >
+            <h2 id="article-author-heading" className="sr-only">
+              About the author
+            </h2>
             {article.createdBy.image ? (
               <img
                 src={article.createdBy.image}
@@ -323,7 +331,7 @@ export default async function ArticlePage({
                 </p>
               )}
             </div>
-          </div>
+          </section>
         </div>
       </main>
 
