@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { cache } from "react";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { userMinimalNameImageSelect } from "@/lib/prisma-selects";
@@ -11,6 +12,7 @@ import {
   formatDateLong,
   formatDateShort,
   getPreviewText,
+  getInitials,
 } from "@/lib/article-helpers";
 import { roleLabel } from "@/lib/roles";
 
@@ -29,7 +31,9 @@ interface ArticleData {
   group: { issueNumber: number | null; volumeNumber: number | null; publishedAt: Date | null; status: string; pdfKey: string | null } | null;
 }
 
-async function loadArticle(slug: string): Promise<ArticleData | null> {
+// Wrapped in React.cache() so generateMetadata and the page component share one query per
+// request instead of each independently hitting the DB (and re-paying the KMS decrypt cost).
+const loadArticle = cache(async (slug: string): Promise<ArticleData | null> => {
   const article = (await prisma.article.findFirst({
     where: { slug, group: { status: "PUBLISHED" } },
     include: {
@@ -40,7 +44,7 @@ async function loadArticle(slug: string): Promise<ArticleData | null> {
     },
   })) as unknown as ArticleData | null;
   return article;
-}
+});
 
 function resolvePrimaryRole(a: ArticleData): string | null {
   if (a.credits.length > 0) {
@@ -51,7 +55,8 @@ function resolvePrimaryRole(a: ArticleData): string | null {
   return fallback === "Reader" ? null : fallback;
 }
 
-function splitParagraphs(body: string): string[] {
+function splitParagraphs(body: string | null | undefined): string[] {
+  if (!body) return [];
   return body
     .split(/\n\s*\n/)
     .map((p) => p.trim())
@@ -153,7 +158,7 @@ export default async function ArticlePage({
                     />
                   ) : (
                     <div className="w-full h-full bg-maroon text-white flex items-center justify-center font-headline font-bold text-[13px]">
-                      {a.name.charAt(0).toUpperCase()}
+                      {getInitials(a.name)}
                     </div>
                   )}
                 </Link>
@@ -285,7 +290,7 @@ export default async function ArticlePage({
               />
             ) : (
               <div className="w-14 h-14 rounded-full bg-maroon text-white flex items-center justify-center font-headline font-bold text-[20px] shrink-0">
-                {primaryAuthor.name.charAt(0).toUpperCase()}
+                {getInitials(primaryAuthor.name)}
               </div>
             )}
             <div className="min-w-0">
