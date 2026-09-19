@@ -4,7 +4,7 @@ import {
   useCallback,
   useEffect,
   useRef,
-  useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
@@ -38,6 +38,11 @@ function focusableWithin(root: HTMLElement): HTMLElement[] {
   return Array.from(
     root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
   ).filter((el) => !el.hasAttribute("hidden") && !el.closest("[hidden]"));
+}
+
+/** `useSyncExternalStore` needs a subscribe fn; this store never changes. */
+function subscribeNever(): () => void {
+  return () => {};
 }
 
 export interface DialogProps {
@@ -79,11 +84,10 @@ export function Dialog({
 }: DialogProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const restoreRef = useRef<HTMLElement | null>(null);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  // `document` only exists after hydration; this is the canonical
+  // "am I on the client yet" hook and, unlike a mount effect, it does not
+  // call setState from inside an effect.
+  const mounted = useSyncExternalStore(subscribeNever, () => true, () => false);
 
   // Move focus into the dialog on open; hand it back to the trigger on close.
   useEffect(() => {

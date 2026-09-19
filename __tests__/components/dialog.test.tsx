@@ -8,7 +8,6 @@ import { Dialog } from "@/app/components/dialog";
 // `@testing-library/react` is not a dependency of this project, so these tests
 // drive React 19's own `act` + `react-dom/client` directly.
 declare global {
-  // eslint-disable-next-line no-var
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
