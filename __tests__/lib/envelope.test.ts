@@ -228,6 +228,85 @@ describe("update path", () => {
   });
 });
 
+describe("nested relation writes", () => {
+  it("throws on a nested update of an encrypted relation, and writes nothing", async () => {
+    const created = await db.article.create({
+      data: {
+        title: "Nested update",
+        slug: "nested-update",
+        body: "<p>body</p>",
+        credits: { create: [{ userId: "u1", creditRole: "Staff Writer" }] },
+      },
+    });
+    const creditBefore = Buffer.from(
+      __store.articleCredit[0].creditRoleCiphertext as Buffer,
+    );
+
+    await expect(
+      db.article.update({
+        where: { id: created.id },
+        data: {
+          credits: {
+            update: { where: { id: __store.articleCredit[0].id }, data: { creditRole: "Editor" } },
+          },
+        },
+      }),
+    ).rejects.toThrow(EnvelopeError);
+
+    await expect(
+      db.article.update({
+        where: { id: created.id },
+        data: { credits: { upsert: { create: { creditRole: "Editor" }, update: {} } } },
+      }),
+    ).rejects.toThrow(/nested `upsert`/);
+
+    // The plaintext must not have reached the database, and the existing row is untouched.
+    expect(
+      Buffer.from(__store.articleCredit[0].creditRoleCiphertext as Buffer).equals(creditBefore),
+    ).toBe(true);
+    expect(__store.articleCredit[0].creditRole).toBeNull();
+  });
+
+  it("allows nested link-only operations that carry no field data", async () => {
+    const created = await db.article.create({
+      data: { title: "Linked", slug: "linked", body: "<p>b</p>" },
+    });
+    await expect(
+      db.article.update({
+        where: { id: created.id },
+        data: { credits: { deleteMany: {} } },
+      }),
+    ).resolves.toBeDefined();
+  });
+
+  it("throws on a writing operation the envelope path does not implement", async () => {
+    await expect(
+      db.user.createManyAndReturn({ data: [{ email: "nan@horacemann.org", name: "Nan" }] }),
+    ).rejects.toThrow(/createManyAndReturn/);
+    expect(__store.user).toHaveLength(0);
+  });
+});
+
+describe("setting an encrypted field to null", () => {
+  it("clears the ciphertext (and hash) instead of leaving stale PII behind", async () => {
+    const created = await db.user.create({
+      data: { email: "olive@horacemann.org", name: "Olive", image: "data:image/png;base64,AAA" },
+    });
+    expect(storedUser(created.id as string).imageCiphertext).toBeInstanceOf(Buffer);
+
+    await db.user.update({ where: { id: created.id }, data: { image: null } });
+
+    const row = storedUser(created.id as string);
+    expect(row.imageCiphertext).toBeNull();
+    // Untouched encrypted columns survive.
+    expect(row.nameCiphertext).toBeInstanceOf(Buffer);
+
+    const read = await db.user.findUnique({ where: { id: created.id } });
+    expect(read.image).toBeNull();
+    expect(read.name).toBe("Olive");
+  });
+});
+
 describe("write failures are fatal", () => {
   it("throws instead of writing plaintext when GenerateDataKey fails", async () => {
     __kms.failGenerate = true;
@@ -256,6 +335,39 @@ describe("read path with a narrow select", () => {
     });
     expect(read.name).toBeNull();
     expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it("does not blame the select when the row itself has no DEK", async () => {
+    // A row whose encryptedDek is NULL on disk (pre-envelope leftover / partial write) is a data
+    // condition: every column was selected, so the caller's select is not the problem.
+    __store.user.push({
+      id: "user-no-dek",
+      email: null,
+      name: null,
+      image: null,
+      googleImage: null,
+      role: "READER",
+      isPlaceholder: false,
+      emailCiphertext: null,
+      emailHash: null,
+      nameCiphertext: null,
+      imageCiphertext: null,
+      encryptedDek: null,
+      dekKekVersion: null,
+      createdAt: new Date(),
+    });
+    const spy = jest.spyOn(console, "error").mockImplementation(() => {});
+
+    const read = await db.user.findUnique({ where: { id: "user-no-dek" } });
+    expect(read.name).toBeNull();
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(String(spy.mock.calls[0][0])).not.toContain("the select omits");
+    expect(String(spy.mock.calls[0][0])).toContain("no encryptedDek");
+
+    // Logged once per model, not once per row.
+    await db.user.findUnique({ where: { id: "user-no-dek" } });
+    expect(spy).toHaveBeenCalledTimes(1);
     spy.mockRestore();
   });
 

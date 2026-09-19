@@ -1,7 +1,11 @@
 // In-memory stand-in for @aws-sdk/client-kms.
 //
-// Jest picks this up automatically for every test (manual mocks for node_modules packages do not
-// need an explicit jest.mock() call), so no test ever talks to real AWS KMS.
+// THIS FILE IS ACTIVE IN EVERY JEST SUITE. Manual mocks for node_modules packages are applied
+// automatically — no `jest.mock("@aws-sdk/client-kms")` call anywhere opts in, and nothing opts
+// out short of `jest.unmock`. So no test can reach real AWS KMS, and any suite that ends up
+// importing `lib/kms.ts` (directly, or through `lib/prisma.ts` via a route handler) silently gets
+// these in-memory keys. Keep it cheap, deterministic and free of side effects, and remember that
+// a change here can flip the behaviour of suites that never mention KMS.
 //
 // The fake "wrapped DEK" is a self-describing blob that carries both the plaintext key and the
 // EncryptionContext it was generated under. Decrypt refuses to unwrap it under a different

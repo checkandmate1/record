@@ -80,6 +80,10 @@ const RELATIONS: Record<string, Record<string, string>> = {
 // Outside production that is a bug in the caller's `select`, so fail loudly and name the field
 // (use the shapes in lib/prisma-selects.ts). In production we keep serving the page: a blank
 // byline beats a 500 on the homepage.
+//
+// NOTE: this runs on the *return value* of a query, so `create`/`update` with a narrow select
+// throw **after** the row has been written. The write is not rolled back; only the response is
+// rejected. Treat the throw as "fix your select", not as "the write failed".
 function reportIncompleteSelect(
   modelName: string,
   encryptedFields: string[],
@@ -94,6 +98,20 @@ function reportIncompleteSelect(
     return;
   }
   throw new EnvelopeError(message);
+}
+
+// A row that was fully selected but has no `encryptedDek` on disk is a *data* condition, not a
+// caller bug: nothing can decrypt it, and no `select` would have helped. Never throw for it (that
+// would take a page down over one bad row) and don't blame the select. Logged once per model so a
+// table full of such rows doesn't flood the logs.
+const loggedMissingDek = new Set<string>();
+function reportMissingDek(modelName: string, rowId: unknown): void {
+  if (loggedMissingDek.has(modelName)) return;
+  loggedMissingDek.add(modelName);
+  console.error(
+    `[prisma envelope-read] ${modelName} row ${String(rowId)} has no encryptedDek on disk; its ` +
+      `encrypted fields stay NULL. (Logged once per model per process.)`,
+  );
 }
 
 // Read path: when a returned row carries a populated `encryptedDek`, decrypt the *Ciphertext
@@ -124,13 +142,16 @@ async function applyEnvelopeRead(
     // Which encrypted fields did this query actually ask for? A key that is absent from the row
     // was not selected; a key that is present must be decryptable.
     const requested = Object.keys(fields).filter((f) => f in r);
+    // `in` distinguishes "this column was not selected" (a caller bug) from "this column is NULL
+    // on disk" (a data condition). Conflating the two made a NULL DEK report a select that was
+    // in fact complete.
+    const selectedDek = "encryptedDek" in r;
+    const selectedId = "id" in r;
 
-    if (requested.length > 0 && (!hasDek || typeof id !== "string")) {
-      reportIncompleteSelect(
-        modelName,
-        requested,
-        typeof id !== "string" ? "id" : "encryptedDek",
-      );
+    if (requested.length > 0 && (!selectedDek || !selectedId)) {
+      reportIncompleteSelect(modelName, requested, !selectedId ? "id" : "encryptedDek");
+    } else if (requested.length > 0 && (!hasDek || typeof id !== "string")) {
+      reportMissingDek(modelName, id);
     } else if (hasDek && typeof id === "string") {
       const missingCiphertext = requested.filter((f) => !(`${f}Ciphertext` in r));
       if (missingCiphertext.length > 0) {
@@ -258,13 +279,17 @@ async function applyEnvelopeWrite(
     return;
   }
 
-  if (
-    operation !== "create" &&
-    operation !== "createMany" &&
-    operation !== "update" &&
-    operation !== "updateMany" &&
-    operation !== "upsert"
-  ) {
+  if (!HANDLED_WRITE_OPERATIONS.has(operation)) {
+    // Reads and deletes carry no field data, so they just recurse for nested writes. Anything
+    // that writes and isn't handled above (a new Prisma operation such as `createManyAndReturn`)
+    // must not slip through with its plaintext intact.
+    if (/^(create|update|upsert)/.test(operation)) {
+      throw new EnvelopeError(
+        `${modelName}.${operation} is not supported on an encrypted model: the envelope write ` +
+          `path does not know how to encrypt its payload. Use create/createMany/update/` +
+          `updateMany/upsert, or teach applyEnvelopeWrite about it.`,
+      );
+    }
     await applyEnvelopeWriteNested(modelName, args);
     return;
   }
@@ -303,6 +328,15 @@ async function applyEnvelopeWrite(
   }
 
   for (const data of dataBlocks) {
+    // Setting an encrypted field to null must clear its ciphertext too. Nulling only the legacy
+    // column left the old ciphertext in place and the read path resurrected it — a "removed"
+    // profile picture or featured image kept its PII. No DEK is needed for this.
+    for (const [field, mode] of Object.entries(fields)) {
+      if (!(field in data) || data[field] !== null) continue;
+      data[`${field}Ciphertext`] = null;
+      if (mode === "deterministic") data[`${field}Hash`] = null;
+    }
+
     const hasPlaintext = Object.keys(fields).some((f) => typeof data[f] === "string");
     const isCreateBlock =
       operation === "create" ||
@@ -402,8 +436,29 @@ async function findExistingRow(
   return (await modelDelegate.findUnique({ where })) as Record<string, unknown> | null;
 }
 
+// Operations applyEnvelopeWrite knows how to encrypt.
+const HANDLED_WRITE_OPERATIONS = new Set([
+  "create",
+  "createMany",
+  "update",
+  "updateMany",
+  "upsert",
+]);
+
+// Nested relation keys that carry no field data (they take ids / unique inputs only), so they are
+// safe to pass through untouched. `connectOrCreate` is deliberately NOT here: its `create` block
+// carries plaintext and would need the same treatment as a top-level create.
+const DATA_FREE_NESTED_OPERATIONS = new Set([
+  "connect",
+  "disconnect",
+  "set",
+  "delete",
+  "deleteMany",
+]);
+
 // Walk known relations on data blocks and apply envelope-write recursively to nested writes.
-// Handles `{ create: X | X[] }` and `{ createMany: { data: X[] } }` shapes.
+// Handles `{ create: X | X[] }` and `{ createMany: { data: X[] } }` shapes; every other nested
+// write on an encrypted relation throws, because passing it through would write plaintext.
 async function applyEnvelopeWriteNested(
   modelName: string,
   args: Record<string, unknown>,
@@ -434,6 +489,22 @@ async function applyEnvelopeWriteNested(
       const relValue = data[relName];
       if (!relValue || typeof relValue !== "object" || Array.isArray(relValue)) continue;
       const relObj = relValue as Record<string, unknown>;
+
+      // A nested `update` / `updateMany` / `upsert` / `connectOrCreate` on an encrypted relation
+      // used to sail straight past this walker: no ciphertext written, no error raised, the
+      // plaintext landing in a column the read path ignores. Refuse it instead. (Do the update
+      // as its own top-level call, by id.)
+      if (ENCRYPTED_FIELDS[relModel]) {
+        for (const key of Object.keys(relObj)) {
+          if (key === "create" || key === "createMany") continue;
+          if (DATA_FREE_NESTED_OPERATIONS.has(key)) continue;
+          throw new EnvelopeError(
+            `${modelName}.${relName}: nested \`${key}\` is not supported on the encrypted model ` +
+              `${relModel} — its payload would be written as plaintext. Write ${relModel} rows ` +
+              `with their own create/update call, keyed by id.`,
+          );
+        }
+      }
 
       if ("create" in relObj && relObj.create) {
         const items = Array.isArray(relObj.create) ? relObj.create : [relObj.create];

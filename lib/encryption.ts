@@ -89,7 +89,7 @@ export function blindIndex(plaintext: string): Buffer {
   }
   if (!blindIndexKey) {
     if (process.env.NODE_ENV === "production") {
-      throw new Error("Blind index key not initialized");
+      throw new EnvelopeError("Blind index key not initialized");
     }
     // Dev mode without ENCRYPTION_KEY: return a deterministic stand-in so the path doesn't blow up
     // on local DBs that aren't using encryption. Production refuses above.

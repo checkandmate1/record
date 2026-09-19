@@ -202,6 +202,12 @@ function delegate(model: ModelName) {
       for (const item of items) insert(model, item);
       return { count: items.length };
     },
+    // Present so the envelope pipeline can be tested against a writing operation it does not
+    // implement; it must never actually run.
+    createManyAndReturn: async (args: Row) => {
+      const items = Array.isArray(args.data) ? (args.data as Row[]) : [args.data as Row];
+      return items.map((item) => project(model, { ...insert(model, item) }, args));
+    },
     findUnique: async (args: Row) => {
       const row = __store[model].find((r) => matches(r, args.where as Row));
       return row ? project(model, { ...row }, args) : null;

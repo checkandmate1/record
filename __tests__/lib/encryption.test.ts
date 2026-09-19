@@ -124,10 +124,11 @@ describe("blindIndex", () => {
     expect(mod.blindIndex("a@horacemann.org")).toHaveLength(32);
   });
 
-  it("throws in production when no pepper is configured", () => {
+  it("throws EnvelopeError in production when no pepper is configured", () => {
     const mod = loadEncryption();
     setNodeEnv("production");
     expect(() => mod.blindIndex("a@horacemann.org")).toThrow("Blind index key not initialized");
+    expect(() => mod.blindIndex("a@horacemann.org")).toThrow(mod.EnvelopeError);
   });
 
   it("throws in production after markEncryptionInitFailed, even with a pepper in env", () => {
