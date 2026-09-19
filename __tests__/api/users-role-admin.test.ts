@@ -1,5 +1,4 @@
 import { PATCH as updateRole } from "@/app/api/users/[id]/role/route";
-import { PATCH as updateAdmin } from "@/app/api/users/[id]/admin/route";
 import { NextRequest } from "next/server";
 
 jest.mock("@/lib/prisma", () => ({
@@ -113,41 +112,5 @@ describe("PATCH /api/users/[id]/role", () => {
     });
 
     expect(res.status).toBe(200);
-  });
-});
-
-describe("PATCH /api/users/[id]/admin", () => {
-  beforeEach(() => jest.clearAllMocks());
-
-  it("toggles admin status", async () => {
-    mockCheckAdmin.mockResolvedValue(adminSession);
-    mockFindUnique.mockResolvedValue({ id: "user-1", isAdmin: false });
-    mockUpdate.mockResolvedValue({ id: "user-1", isAdmin: true });
-
-    const req = new NextRequest("http://localhost/api/users/user-1/admin", {
-      method: "PATCH",
-      body: JSON.stringify({ isAdmin: true }),
-      headers: { "Content-Type": "application/json" },
-    });
-    const res = await updateAdmin(req, { params: Promise.resolve({ id: "user-1" }) });
-
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.isAdmin).toBe(true);
-  });
-
-  it("prevents admin from toggling their own admin status", async () => {
-    mockCheckAdmin.mockResolvedValue(adminSession);
-
-    const req = new NextRequest("http://localhost/api/users/admin-1/admin", {
-      method: "PATCH",
-      body: JSON.stringify({ isAdmin: false }),
-      headers: { "Content-Type": "application/json" },
-    });
-    const res = await updateAdmin(req, { params: Promise.resolve({ id: "admin-1" }) });
-
-    expect(res.status).toBe(400);
-    const body = await res.json();
-    expect(body.error.message).toContain("your own");
   });
 });

@@ -116,10 +116,6 @@ export const updateRoleSchema = z.object({
   role: z.enum(ALL_ROLES),
 });
 
-export const updateAdminSchema = z.object({
-  isAdmin: z.boolean(),
-});
-
 export const directorySearchSchema = z.object({
   q: z.string().trim().min(1, "Query required").max(100),
 });
