@@ -9,7 +9,6 @@
     "lint": "eslint",
     "test": "jest",
     "test:watch": "jest --watch",
-    "migrate-articles": "ts-node --compiler-options {\"module\":\"CommonJS\"} scripts/migrate-articles.ts",
     "export-articles": "ts-node --compiler-options {\"module\":\"CommonJS\"} scripts/export-articles.ts",
     "import-articles": "ts-node --compiler-options {\"module\":\"CommonJS\"} scripts/import-articles.ts"
   },
