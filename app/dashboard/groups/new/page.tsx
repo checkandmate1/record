@@ -28,10 +28,11 @@ export default async function NewGroupPage() {
         <form action={createGroupWithArticles} className="mt-8 space-y-6">
           <div className="flex gap-3">
             <div className="w-32">
-              <label className="block font-headline text-[12px] font-semibold tracking-[0.06em] uppercase text-caption mb-1">
+              <label htmlFor="new-group-volume" className="block font-headline text-[12px] font-semibold tracking-[0.06em] uppercase text-caption mb-1">
                 Volume #
               </label>
               <input
+                id="new-group-volume"
                 name="volumeNumber"
                 type="number"
                 min="1"
@@ -43,10 +44,11 @@ export default async function NewGroupPage() {
               />
             </div>
             <div className="w-32">
-              <label className="block font-headline text-[12px] font-semibold tracking-[0.06em] uppercase text-caption mb-1">
+              <label htmlFor="new-group-issue" className="block font-headline text-[12px] font-semibold tracking-[0.06em] uppercase text-caption mb-1">
                 Issue #
               </label>
               <input
+                id="new-group-issue"
                 name="issueNumber"
                 type="number"
                 min="1"

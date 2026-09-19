@@ -147,10 +147,11 @@ export default async function GroupEditorPage({
         {canManage && (
           <form action={boundUpdate} className="mt-4 flex gap-3 items-end">
             <div>
-              <label className="block font-headline text-[11px] font-semibold tracking-[0.08em] uppercase text-caption mb-1">
+              <label htmlFor="group-volume" className="block font-headline text-[11px] font-semibold tracking-[0.08em] uppercase text-caption mb-1">
                 Volume #
               </label>
               <input
+                id="group-volume"
                 name="volumeNumber"
                 type="number"
                 min="1"
@@ -161,10 +162,11 @@ export default async function GroupEditorPage({
               />
             </div>
             <div>
-              <label className="block font-headline text-[11px] font-semibold tracking-[0.08em] uppercase text-caption mb-1">
+              <label htmlFor="group-issue" className="block font-headline text-[11px] font-semibold tracking-[0.08em] uppercase text-caption mb-1">
                 Issue #
               </label>
               <input
+                id="group-issue"
                 name="issueNumber"
                 type="number"
                 min="1"
@@ -214,7 +216,11 @@ export default async function GroupEditorPage({
           )}
           {canPublish && group.status === "DRAFT" && (
             <form action={boundSchedule} className="flex gap-2 items-center">
+              <label htmlFor="group-scheduled-at" className="sr-only">
+                Schedule publication
+              </label>
               <input
+                id="group-scheduled-at"
                 type="datetime-local"
                 name="scheduledAt"
                 defaultValue={group.scheduledAt?.toISOString().slice(0, 16) ?? ""}

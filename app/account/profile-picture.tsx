@@ -75,6 +75,7 @@ export function ProfilePicture({
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
+          aria-label={uploading ? "Uploading profile picture" : "Change profile picture"}
           className="cursor-pointer absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center"
         >
           <span className="text-white text-[11px] font-headline font-semibold tracking-wide uppercase opacity-0 group-hover:opacity-100 transition-opacity">
@@ -86,6 +87,7 @@ export function ProfilePicture({
           ref={inputRef}
           type="file"
           accept="image/png,image/jpeg,image/webp"
+          aria-label="Profile picture file"
           className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0];
@@ -98,6 +100,7 @@ export function ProfilePicture({
         <button
           type="button"
           onClick={handleReset}
+          aria-label="Reset profile picture to the Google account photo"
           className="cursor-pointer mt-2 font-headline text-[12px] tracking-wide text-caption/50 hover:text-maroon transition-colors"
         >
           Reset

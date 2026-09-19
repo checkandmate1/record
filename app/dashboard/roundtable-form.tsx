@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useId, useState, useRef } from "react";
 
 interface SideState {
   id: string | null;
@@ -45,6 +45,8 @@ export function RoundTableForm({
   const [turns, setTurns] = useState<TurnState[]>(
     initialTurns.map((t, i) => ({ ...t, sideIndex: i % 2 }))
   );
+  // Prefix for the ids that tie each repeated label to its control.
+  const fieldId = useId();
 
   function updateSideLabel(i: number, label: string) {
     setSides(sides.map((s, idx) => (idx === i ? { ...s, label } : s)));
@@ -92,10 +94,11 @@ export function RoundTableForm({
     <form action={action} className="mt-8 space-y-10">
       {/* Prompt */}
       <div>
-        <label className="block font-headline text-[13px] font-semibold tracking-[0.08em] uppercase text-caption mb-2">
+        <label htmlFor="rt-prompt" className="block font-headline text-[13px] font-semibold tracking-[0.08em] uppercase text-caption mb-2">
           Prompt
         </label>
         <textarea
+          id="rt-prompt"
           name="prompt"
           required
           rows={2}
@@ -119,10 +122,11 @@ export function RoundTableForm({
             );
             return (
               <div key={i} className="border border-ink/10 p-5">
-                <label className="block font-headline text-[12px] font-semibold tracking-[0.08em] uppercase text-caption mb-2">
+                <label htmlFor={`${fieldId}-side-${i}-label`} className="block font-headline text-[12px] font-semibold tracking-[0.08em] uppercase text-caption mb-2">
                   Side {i + 1} Label
                 </label>
                 <input
+                  id={`${fieldId}-side-${i}-label`}
                   type="text"
                   value={side.label}
                   onChange={(e) => updateSideLabel(i, e.target.value)}
@@ -224,7 +228,11 @@ export function RoundTableForm({
                       </button>
                     )}
                   </div>
+                  <label htmlFor={`${fieldId}-turn-${i}`} className="sr-only">
+                    {side.label} turn {i + 1}
+                  </label>
                   <textarea
+                    id={`${fieldId}-turn-${i}`}
                     value={turn.body}
                     onChange={(e) => updateTurnBody(i, e.target.value)}
                     rows={4}
@@ -273,6 +281,7 @@ function SideAuthorSearch({
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const searchId = useId();
 
   const filtered = query.length > 0
     ? users.filter((u) => u.name.toLowerCase().includes(query.toLowerCase()))
@@ -280,7 +289,11 @@ function SideAuthorSearch({
 
   return (
     <div ref={ref} className="relative">
+      <label htmlFor={searchId} className="sr-only">
+        Search for an author to add
+      </label>
       <input
+        id={searchId}
         type="text"
         value={query}
         onChange={(e) => {

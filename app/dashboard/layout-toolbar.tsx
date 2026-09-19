@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import Link from "next/link";
 
 interface LayoutToolbarProps {
@@ -12,6 +12,7 @@ interface LayoutToolbarProps {
 
 export function LayoutToolbar({ groupId, groupName, opacity, onOpacityChange }: LayoutToolbarProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const opacityId = useId();
 
   return (
     <div className="fixed top-0 left-0 right-0 z-50 bg-ink text-white px-4 py-2">
@@ -49,10 +50,11 @@ export function LayoutToolbar({ groupId, groupName, opacity, onOpacityChange }: 
                   Editor Settings
                 </p>
                 <div>
-                  <label className="block font-headline text-[12px] text-caption mb-1.5">
+                  <label htmlFor={opacityId} className="block font-headline text-[12px] text-caption mb-1.5">
                     Placeholder Opacity: {Math.round(opacity * 100)}%
                   </label>
                   <input
+                    id={opacityId}
                     type="range"
                     min="0.1"
                     max="1"
