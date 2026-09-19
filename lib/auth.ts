@@ -59,7 +59,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, user }) {
       const dbUser = await prisma.user.findUnique({
         where: { id: user.id },
-        select: { id: true, role: true, isAdmin: true, image: true, googleImage: true },
+        select: {
+          id: true,
+          role: true,
+          isAdmin: true,
+          image: true,
+          googleImage: true,
+          // image is encrypted; without these the extension can't decrypt it and the
+          // "seed googleImage from image" check below always sees a null image.
+          encryptedDek: true,
+          dekKekVersion: true,
+          imageCiphertext: true,
+        },
       });
       if (dbUser) {
         session.user.id = dbUser.id;

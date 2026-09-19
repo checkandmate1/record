@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { userMinimalNameSelect, userMinimalNameImageSelect, userPublicSelect, articleBodySelect, articleListSelect } from "@/lib/prisma-selects";
+import { userMinimalNameSelect, userPublicSelect, articleBodySelect, articleListSelect, articleCreditSelect } from "@/lib/prisma-selects";
 import { Footer } from "@/app/footer";
 import { LayoutEditorWrapper } from "@/app/dashboard/layout-editor-wrapper";
 import { formatIssueTitle } from "@/lib/article-helpers";
@@ -52,7 +52,7 @@ export default async function LayoutEditorPage({
                   select: {
                     ...articleListSelect,
                     createdBy: { select: userPublicSelect },
-                    credits: { select: { creditRole: true, user: { select: userMinimalNameSelect } } },
+                    credits: { select: articleCreditSelect },
                   },
                 },
               },

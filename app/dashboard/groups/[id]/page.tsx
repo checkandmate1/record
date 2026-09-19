@@ -2,7 +2,11 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { userMinimalNameSelect, userMinimalNameImageSelect } from "@/lib/prisma-selects";
+import {
+  userMinimalNameImageSelect,
+  articleCreditSelect,
+  roundTableSummarySelect,
+} from "@/lib/prisma-selects";
 import { SubpageHeader } from "@/app/subpage-header";
 import {
   updateGroup,
@@ -49,25 +53,13 @@ export default async function GroupEditorPage({
           title: true,
           section: true,
           credits: {
-            select: { creditRole: true, user: { select: userMinimalNameSelect } },
+            select: articleCreditSelect,
           },
         },
         orderBy: { createdAt: "desc" },
       },
       roundTables: {
-        select: {
-          id: true,
-          slug: true,
-          prompt: true,
-          sides: {
-            orderBy: { order: "asc" },
-            select: {
-              label: true,
-              authors: { select: { user: { select: { name: true } } } },
-            },
-          },
-          turns: { select: { id: true } },
-        },
+        select: roundTableSummarySelect,
       },
       blocks: {
         orderBy: { order: "asc" },

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { checkAdmin } from "@/lib/middleware/auth";
 import { errorResponse } from "@/lib/errors";
+import { userPublicWithEmailSelect } from "@/lib/prisma-selects";
 
 export async function GET(req: NextRequest) {
   const { error } = await checkAdmin();
@@ -17,11 +18,7 @@ export async function GET(req: NextRequest) {
       skip: (page - 1) * limit,
       take: limit,
       select: {
-        id: true,
-        email: true,
-        name: true,
-        image: true,
-        role: true,
+        ...userPublicWithEmailSelect,
         isAdmin: true,
         createdAt: true,
       },

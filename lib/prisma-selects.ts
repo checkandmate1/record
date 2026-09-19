@@ -69,3 +69,40 @@ export const articleBodySelect = {
   dekKekVersion: true,
   bodyCiphertext: true,
 } as const;
+
+// ---- ArticleCredit ----
+// Use as `credits: { select: articleCreditSelect }` wherever the ArticleCredit relation is
+// narrowed with an explicit `select` (rather than `include`, which returns every ArticleCredit
+// scalar — envelope columns included — by default). creditRole is deterministic-encrypted.
+
+export const articleCreditSelect = {
+  creditRole: true,
+  encryptedDek: true,
+  dekKekVersion: true,
+  creditRoleCiphertext: true,
+  user: { select: userMinimalNameSelect },
+} as const;
+
+// ---- RoundTable ----
+// A RoundTable plus its sides/authors, for dashboard summaries. prompt (RoundTable) and label
+// (RoundTableSide) are both random-encrypted, so each level needs its own envelope columns.
+
+export const roundTableSummarySelect = {
+  id: true,
+  slug: true,
+  prompt: true,
+  encryptedDek: true,
+  dekKekVersion: true,
+  promptCiphertext: true,
+  sides: {
+    orderBy: { order: "asc" as const },
+    select: {
+      label: true,
+      encryptedDek: true,
+      dekKekVersion: true,
+      labelCiphertext: true,
+      authors: { select: { user: { select: userMinimalNameSelect } } },
+    },
+  },
+  turns: { select: { id: true } },
+} as const;
