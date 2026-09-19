@@ -66,6 +66,8 @@ model User {
   sessions            Session[]
   approvals           Approval[]
   roundTableSides     RoundTableSideAuthor[]
+
+  @@index([isPlaceholder])
 }
 
 model Account {
@@ -85,6 +87,7 @@ model Account {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
+  @@index([userId])
 }
 
 model Session {
@@ -94,6 +97,8 @@ model Session {
   expires      DateTime
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Article {
@@ -123,6 +128,10 @@ model Article {
   images     ArticleImage[]
   blockSlots BlockSlot[]
   approvals  Approval[]
+
+  @@index([groupId])
+  @@index([section])
+  @@index([createdById])
 }
 
 model ArticleCredit {
@@ -142,6 +151,8 @@ model ArticleCredit {
   user    User    @relation(fields: [userId], references: [id])
 
   @@unique([articleId, userId, creditRoleHash])
+  @@index([userId])
+  @@index([articleId])
 }
 
 model ArticleImage {
@@ -161,6 +172,8 @@ model ArticleImage {
   dekKekVersion     Int
 
   article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@index([articleId])
 }
 
 model SiteSetting {
@@ -191,6 +204,8 @@ model ArticleGroup {
   articles    Article[]
   approvals   Approval[]
   roundTables RoundTable[]
+
+  @@index([status])
 }
 
 // Append-only audit log of issue PDF fetches. No FKs so historical access survives
@@ -211,6 +226,7 @@ model RoundTable {
   slug      String   @unique
   // Legacy plaintext column — wiped; ciphertext is canonical.
   prompt    String?  @db.VarChar(500)
+  // No separate @@index([groupId]) here — @unique already creates one.
   groupId   String   @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -240,6 +256,8 @@ model RoundTableSide {
   roundTable RoundTable             @relation(fields: [roundTableId], references: [id], onDelete: Cascade)
   authors    RoundTableSideAuthor[]
   turns      RoundTableTurn[]
+
+  @@index([roundTableId])
 }
 
 model RoundTableSideAuthor {
@@ -268,6 +286,8 @@ model RoundTableTurn {
 
   roundTable RoundTable     @relation(fields: [roundTableId], references: [id], onDelete: Cascade)
   side       RoundTableSide @relation(fields: [sideId], references: [id], onDelete: Cascade)
+
+  @@index([sideId])
 }
 
 model LayoutBlock {
@@ -280,6 +300,8 @@ model LayoutBlock {
 
   group  ArticleGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
   slots  BlockSlot[]
+
+  @@index([groupId])
 }
 
 model BlockSlot {
@@ -304,6 +326,9 @@ model BlockSlot {
 
   block   LayoutBlock @relation(fields: [blockId], references: [id], onDelete: Cascade)
   article Article?    @relation(fields: [articleId], references: [id])
+
+  @@index([blockId])
+  @@index([articleId])
 }
 
 model Approval {
@@ -320,4 +345,7 @@ model Approval {
 
   @@unique([userId, articleId])
   @@unique([userId, groupId])
+  @@index([articleId])
+  @@index([groupId])
+  @@index([userId])
 }
