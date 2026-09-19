@@ -19,9 +19,14 @@ export function SbThumbnailsPattern({
   const displaySlots = slots.slice(0, 3);
   if (!editMode && displaySlots.every((s) => !s?.article)) return null;
 
+  // Live mode: an unfilled slot renders nothing (`EditableSlot` returns null), so
+  // its row and divider must go with it — otherwise the layout keeps a stray rule
+  // across empty space. Edit mode keeps every slot so it stays clickable.
+  const visibleSlots = editMode ? displaySlots : displaySlots.filter((s) => s?.article);
+
   return (
     <div>
-      {displaySlots.map((slot, idx) => {
+      {visibleSlots.map((slot, idx) => {
         const article = slot?.article ?? getPlaceholderArticle();
         const imgSrc = slot?.mediaUrl ?? null;
         const thumbSize = scalePx(40, slot?.imageScale);
@@ -30,7 +35,7 @@ export function SbThumbnailsPattern({
           <div
             key={slot?.id ?? idx}
             className={`flex items-center gap-3 py-2.5 ${
-              idx < displaySlots.length - 1 ? "border-b border-neutral-200" : ""
+              idx < visibleSlots.length - 1 ? "border-b border-neutral-200" : ""
             }`}
           >
             {imgSrc ? (

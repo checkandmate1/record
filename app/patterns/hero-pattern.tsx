@@ -37,6 +37,13 @@ export function HeroPattern({
 
   const cropRatio = cropRatioClass(imageSlot?.imageCrop, imageSlot?.imageCropCustom);
 
+  // Live mode: an unfilled slot renders nothing (`EditableSlot` returns null), so
+  // its row and divider must go with it — otherwise the layout keeps a stray rule
+  // across empty space. Edit mode keeps every slot so it stays clickable.
+  const visibleHeadlines = editMode
+    ? headlineSlots
+    : headlineSlots.filter((s) => s?.article);
+
   return (
     <div>
       <div className="flex flex-col lg:flex-row gap-6">
@@ -114,16 +121,16 @@ export function HeroPattern({
       </div>
 
       {/* Headline-only articles below */}
-      {(headlineSlots.length > 0 || editMode) && (
+      {(visibleHeadlines.length > 0 || editMode) && (
         <div className="mt-3 pt-3 border-t border-neutral-200 flex gap-4 -mb-2">
-          {headlineSlots.map((slot, idx) => {
+          {visibleHeadlines.map((slot, idx) => {
             const slotArticle = slot?.article ?? getPlaceholderArticle();
             const hlByline = slot?.showByline ? getBylineAuthors(slotArticle) : null;
             return (
               <div
                 key={slot?.id ?? idx}
                 className={`flex-1 ${
-                  idx < headlineSlots.length - 1 ? "border-r border-neutral-200 pr-4" : ""
+                  idx < visibleHeadlines.length - 1 ? "border-r border-neutral-200 pr-4" : ""
                 }`}
               >
                 <EditableSlot slot={slot}>

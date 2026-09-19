@@ -24,10 +24,16 @@ export function FourGridPattern({
   // Live mode: skip the entire block if NO slot has any content.
   if (!editMode && slots.every((s) => !s?.article)) return null;
 
+  // Live mode: an unfilled slot renders nothing (`EditableSlot` returns null), so
+  // its row and divider must go with it — otherwise the layout keeps a stray rule
+  // across empty space. Edit mode keeps every slot so it stays clickable.
+  const visibleTop = editMode ? topSlots : topSlots.filter((s) => s?.article);
+  const visibleBottom = editMode ? bottomSlots : bottomSlots.filter((s) => s?.article);
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
       {/* Top row — headline + short excerpt, no image */}
-      {topSlots.map((slot, idx) => {
+      {visibleTop.map((slot, idx) => {
         const article = slot?.article ?? getPlaceholderArticle();
         const { authors, primaryRole } = getBylineAuthors(article);
         return (
@@ -85,7 +91,7 @@ export function FourGridPattern({
       })}
 
       {/* Bottom row — small thumbnail + headline */}
-      {bottomSlots.map((slot, idx) => {
+      {visibleBottom.map((slot, idx) => {
         const article = slot?.article ?? getPlaceholderArticle();
         const { authors, primaryRole } = getBylineAuthors(article);
         const imgSrc = slot?.mediaUrl ?? null;
