@@ -4,6 +4,7 @@ import { userPublicWithEmailSelect } from "@/lib/prisma-selects";
 import { checkAdmin } from "@/lib/middleware/auth";
 import { updateRoleSchema } from "@/lib/validations";
 import { errorResponse } from "@/lib/errors";
+import { canAssignRole } from "@/lib/roles";
 
 export async function PATCH(
   req: NextRequest,
@@ -13,7 +14,7 @@ export async function PATCH(
   const { session, error } = await checkAdmin();
   if (error) return error;
 
-  // Mirror the self-id guard in /api/users/[id]/admin/route.ts and admin-actions.ts:
+  // Mirror the self-id guard in admin-actions.ts:
   // a sole admin demoting themselves locks everyone out of the admin panel.
   if (session.user.id === id) {
     return errorResponse("BAD_REQUEST", "You cannot change your own role");
@@ -29,6 +30,12 @@ export async function PATCH(
 
   if (!parsed.success) {
     return errorResponse("BAD_REQUEST", parsed.error.issues[0].message);
+  }
+
+  // Caller must outrank both the target's current role and the new role unless they are
+  // WEB_MASTER — so WEB_TEAM can neither grant nor remove WEB_TEAM / WEB_MASTER.
+  if (!canAssignRole(session.user.role, existing.role, parsed.data.role)) {
+    return errorResponse("FORBIDDEN", "Only a web master can assign or remove admin roles", 403);
   }
 
   const user = await prisma.user.update({
