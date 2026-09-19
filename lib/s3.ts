@@ -32,6 +32,30 @@ export async function createPresignedUploadUrl(
   return getSignedUrl(s3, command, { expiresIn: 600 }); // 10 minutes
 }
 
+// Server-side upload. The browser path is always a presigned PUT (the server never sees image
+// bytes); this exists for back-fill scripts that already hold the bytes — see
+// scripts/migrate-featured-images-to-s3.ts.
+export async function putS3Object(
+  key: string,
+  body: Buffer,
+  contentType: string
+): Promise<void> {
+  const command = new PutObjectCommand({
+    Bucket: BUCKET,
+    Key: key,
+    Body: body,
+    ContentType: contentType,
+  });
+
+  await s3.send(command);
+}
+
+// The https URL for an object under the public-read `uploads/*` prefix. Mirrors the `publicUrl`
+// POST /api/upload hands the browser, and the host rule `isS3Url` enforces.
+export function getPublicUrl(key: string): string {
+  return `https://${BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
+}
+
 export async function deleteS3Object(key: string): Promise<void> {
   const command = new DeleteObjectCommand({
     Bucket: BUCKET,

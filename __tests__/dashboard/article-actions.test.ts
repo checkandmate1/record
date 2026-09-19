@@ -50,6 +50,10 @@ const OTHER_ID = "22222222-2222-4222-8222-222222222222";
 const AUTHOR_ID = "33333333-3333-4333-8333-333333333333";
 const GROUP_ID = "44444444-4444-4444-8444-444444444444";
 
+const BUCKET = "record-test-bucket";
+const REGION = "us-east-2";
+const S3_IMAGE_URL = `https://${BUCKET}.s3.${REGION}.amazonaws.com/uploads/${OWNER_ID}/abc.jpg`;
+
 const writerSession = { user: { id: OWNER_ID, role: "WRITER" } };
 const otherWriterSession = { user: { id: OTHER_ID, role: "WRITER" } };
 const editorSession = { user: { id: OTHER_ID, role: "EDITOR" } };
@@ -72,6 +76,9 @@ function articleForm(overrides: Record<string, string> = {}, creditCount = 1): F
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // isS3Url reads the bucket/region from the environment at call time.
+  process.env.AWS_S3_BUCKET = BUCKET;
+  process.env.AWS_REGION = REGION;
   mockAuth.mockResolvedValue(writerSession);
   mockGroup.findUnique.mockResolvedValue({ id: GROUP_ID, status: "DRAFT" });
   mockArticle.findUnique.mockResolvedValue({
@@ -165,11 +172,49 @@ describe("updateArticle validation", () => {
     );
   });
 
-  it("rejects a featured image that is not http(s) or data:image/*", async () => {
+  it("rejects a featured image with a dangerous scheme", async () => {
     await expect(
       updateArticle("a1", articleForm({ featuredImage: "javascript:alert(1)" })),
     ).rejects.toThrow();
     expect(mockArticle.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects a base64 data URL featured image", async () => {
+    await expect(
+      updateArticle("a1", articleForm({ featuredImage: "data:image/png;base64,AAAA" })),
+    ).rejects.toThrow(/upload bucket/i);
+    expect(mockArticle.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects an https featured image outside the upload bucket", async () => {
+    await expect(
+      updateArticle("a1", articleForm({ featuredImage: "https://evil.example.com/pic.jpg" })),
+    ).rejects.toThrow(/upload bucket/i);
+    expect(mockArticle.update).not.toHaveBeenCalled();
+  });
+
+  it("accepts a featured image in the site's S3 bucket", async () => {
+    await updateArticle("a1", articleForm({ featuredImage: S3_IMAGE_URL }));
+    expect(mockArticle.update.mock.calls[0][0].data.featuredImage).toBe(S3_IMAGE_URL);
+  });
+
+  it("stores null when no featured image is submitted", async () => {
+    await updateArticle("a1", articleForm());
+    expect(mockArticle.update.mock.calls[0][0].data.featuredImage).toBeNull();
+  });
+
+  it("accepts a featured image on create", async () => {
+    await expect(
+      createArticleInGroup(GROUP_ID, articleForm({ featuredImage: S3_IMAGE_URL })),
+    ).resolves.not.toThrow();
+    expect(mockArticle.create.mock.calls[0][0].data.featuredImage).toBe(S3_IMAGE_URL);
+  });
+
+  it("rejects a data URL featured image on create", async () => {
+    await expect(
+      createArticleInGroup(GROUP_ID, articleForm({ featuredImage: "data:image/png;base64,AAAA" })),
+    ).rejects.toThrow(/upload bucket/i);
+    expect(mockArticle.create).not.toHaveBeenCalled();
   });
 });
 
