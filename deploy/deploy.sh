@@ -19,6 +19,16 @@ REF="${REF:-$DEFAULT_REF}"
 export PATH=/root/.nvm/versions/node/v22.22.1/bin:$PATH
 export NODE_OPTIONS="--max-old-space-size=1536"   # ~1 GB RAM + swap box; next build is memory hungry
 
+# Preflight: the box has ~1 GB RAM + 2.5 GB swap, and npm ci / next build need well over 1 GB between
+# them. Leftover VS Code Remote servers or a runaway process can quietly eat the swap and get us OOM-killed.
+avail=$(awk '/MemAvailable/{a=$2} /SwapFree/{s=$2} END{print int((a+s)/1024)}' /proc/meminfo)
+if (( avail < 1200 )); then
+  echo "!! only ${avail} MB of RAM+swap available; a deploy needs ~1200 MB. Biggest swap holders:" >&2
+  for p in /proc/[0-9]*; do sw=$(awk '/VmSwap/{print $2}' "$p/status" 2>/dev/null); [[ -n $sw && $sw -gt 51200 ]] && printf "   %5d MB  %s\n" $((sw/1024)) "$(tr '\0' ' ' < "$p/cmdline" | cut -c1-70)" >&2; done | sort -rn
+  echo "   (VS Code Remote servers: pkill -f .vscode-server)" >&2
+  exit 1
+fi
+
 cd "$APP_DIR"
 git reset -q --hard   # server checkouts are disposable; never hand-edit files here
 [[ -f .env ]] || { echo "$APP_DIR/.env missing — copy deploy/env.${ENV_NAME}.example and fill it in" >&2; exit 1; }
