@@ -27,6 +27,14 @@ SSH_PORT="${SSH_PORT:-22}"
 log() { printf '\n==> %s\n' "$*"; }
 
 log "1/6 apt update + upgrade + unattended-upgrades"
+# Linode images ship grub-pc with a bogus debconf answer (install_devices = "multiselect"), which
+# makes every grub-pc upgrade fail its postinst and aborts apt. The VM boots via Linode's host GRUB
+# reading /boot/grub/grub.cfg, so no disk install is needed: tell debconf "no device" and move on.
+if debconf-show grub-pc 2>/dev/null | grep -qE 'grub-pc/install_devices: multiselect$'; then
+  echo "grub-pc grub-pc/install_devices multiselect " | debconf-set-selections
+  echo "grub-pc grub-pc/install_devices_empty boolean true" | debconf-set-selections
+  dpkg --configure -a || true
+fi
 apt-get update -q
 apt-get upgrade -yq
 apt-get install -yq ufw fail2ban unattended-upgrades apt-listchanges curl
