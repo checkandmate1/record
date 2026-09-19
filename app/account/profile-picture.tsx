@@ -3,6 +3,9 @@
 import { useRef, useState } from "react";
 import { updateProfilePicture, resetProfilePicture } from "@/app/account/account-actions";
 
+const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp"];
+const PROFILE_IMAGE_MAX_CHARS = 1_000_000;
+
 export function ProfilePicture({
   userId,
   currentImage,
@@ -21,9 +24,9 @@ export function ProfilePicture({
   const isCustom = googleImage && image !== googleImage;
 
   async function handleFile(file: File) {
-    if (!file.type.startsWith("image/")) return;
-    if (file.size > 5 * 1024 * 1024) {
-      alert("Image must be under 5MB");
+    // Must match profilePictureSchema in lib/validations.ts: PNG/JPEG/WebP, data URL ≤ 1 MB.
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      alert("Please choose a PNG, JPEG or WebP image.");
       return;
     }
 
@@ -31,6 +34,11 @@ export function ProfilePicture({
     const reader = new FileReader();
     reader.onload = async () => {
       const dataUrl = reader.result as string;
+      if (dataUrl.length > PROFILE_IMAGE_MAX_CHARS) {
+        alert("That image is too large. Please choose a file under about 700 KB.");
+        setUploading(false);
+        return;
+      }
       await updateProfilePicture(userId, dataUrl);
       setImage(dataUrl);
       setUploading(false);
@@ -42,7 +50,8 @@ export function ProfilePicture({
     if (!confirm("Reset your profile picture to your Google account photo?")) return;
     if (!googleImage) return;
     setUploading(true);
-    await resetProfilePicture(userId, googleImage);
+    // The server reads the stored googleImage itself; it no longer accepts a URL from here.
+    await resetProfilePicture(userId);
     setImage(googleImage);
     setUploading(false);
   }
@@ -76,7 +85,7 @@ export function ProfilePicture({
         <input
           ref={inputRef}
           type="file"
-          accept="image/*"
+          accept="image/png,image/jpeg,image/webp"
           className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0];
