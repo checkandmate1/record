@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { userMinimalNameSelect } from "@/lib/prisma-selects";
-import { getPreviewText } from "@/lib/article-helpers";
+import { sanitizeHtml } from "@/lib/sanitize";
 
 // Results carry a short excerpt, never the full decrypted body: 30 article bodies is megabytes
 // of JSON for a list view that shows two lines of each.
@@ -49,11 +49,14 @@ export function issueLabel(g: {
   return g.pdfFilename ?? "Issue PDF";
 }
 
-// Tag-stripped, length-bounded preview of a body. `getPreviewText` appends an ellipsis, so
-// clamp afterwards to keep the hard `SEARCH_EXCERPT_MAX` promise.
+// Tag-stripped, length-bounded preview of a body. Uses `sanitizeHtml` rather than
+// `getPreviewText`, whose `stripHtml` still carries the old greedy `/<[^>]*>/g` and would eat
+// "x < y and z > w" out of the excerpt. Truncation reserves room for the ellipsis so the result
+// is `SEARCH_EXCERPT_MAX` characters *including* it, instead of having it clamped back off.
 function toExcerpt(body: string | null): string {
-  const preview = getPreviewText(body ?? "", SEARCH_EXCERPT_MAX);
-  return preview.length > SEARCH_EXCERPT_MAX ? preview.slice(0, SEARCH_EXCERPT_MAX) : preview;
+  const plain = sanitizeHtml(body ?? "").replace(/\s+/g, " ").trim();
+  if (plain.length <= SEARCH_EXCERPT_MAX) return plain;
+  return plain.slice(0, SEARCH_EXCERPT_MAX - 1).replace(/\s+\S*$/, "") + "…";
 }
 
 export async function searchAll(query: string): Promise<SearchResultItem[]> {

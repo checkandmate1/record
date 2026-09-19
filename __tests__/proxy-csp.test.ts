@@ -29,6 +29,23 @@ function request(path: string, session: { role?: string } | null = { role: "WEB_
   return req;
 }
 
+function apiRequest(
+  path: string,
+  init: { method?: string; ip?: string; origin?: string; referer?: string } = {},
+  session: { role?: string } | null = null,
+) {
+  const headers = new Headers();
+  if (init.ip) headers.set("x-real-ip", init.ip);
+  if (init.origin) headers.set("origin", init.origin);
+  if (init.referer) headers.set("referer", init.referer);
+  const req = new NextRequest(`http://localhost:3000${path}`, {
+    method: init.method ?? "GET",
+    headers,
+  });
+  (req as unknown as { auth: unknown }).auth = session ? { user: { id: "u1", ...session } } : null;
+  return req;
+}
+
 async function headersFor(path: string, session?: { role?: string } | null) {
   const res = await loadProxy()(request(path, session));
   return res.headers;
@@ -52,6 +69,57 @@ describe("proxy security headers", () => {
     const res = await loadProxy()(request("/api/search", null));
     expect(res.status).toBe(401);
     expect(res.headers.get("Content-Security-Policy")).toBeTruthy();
+  });
+
+  it("sets them on the 429 from the rate limiter", async () => {
+    const proxy = loadProxy();
+    let limited: NextResponse | undefined;
+
+    // The anonymous bucket is 60/min, keyed on x-real-ip.
+    for (let i = 0; i < 70; i++) {
+      const res = await proxy(apiRequest("/api/search", { ip: "203.0.113.9" }));
+      if (res.status === 429) {
+        limited = res;
+        break;
+      }
+    }
+
+    expect(limited).toBeDefined();
+    expect(await limited!.json()).toEqual({
+      error: { code: "RATE_LIMITED", message: "Too many requests" },
+    });
+    expect(limited!.headers.get("Content-Security-Policy")).toBeTruthy();
+    expect(limited!.headers.get("Strict-Transport-Security")).toBe(
+      "max-age=31536000; includeSubDomains",
+    );
+  });
+
+  it("sets them on the 403 from the cross-origin check", async () => {
+    const res = await loadProxy()(
+      apiRequest("/api/articles", { method: "POST", origin: "https://evil.example" }),
+    );
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({
+      error: { code: "FORBIDDEN", message: "Cross-origin request denied" },
+    });
+    expect(res.headers.get("Content-Security-Policy")).toBeTruthy();
+    expect(res.headers.get("Strict-Transport-Security")).toBe(
+      "max-age=31536000; includeSubDomains",
+    );
+  });
+
+  it("still lets a same-origin mutating request through the origin check", async () => {
+    const res = await loadProxy()(
+      apiRequest(
+        "/api/articles",
+        { method: "POST", origin: "http://localhost:3000" },
+        { role: "WEB_MASTER" },
+      ),
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-middleware-request-x-nonce")).toBeTruthy();
   });
 
   it("uses a fresh nonce per request and forwards it as x-nonce", async () => {

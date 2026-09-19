@@ -57,6 +57,27 @@ describe("searchAll", () => {
     expect(firstArticle(await searchAll("title")).excerpt).toBe("Hello world");
   });
 
+  it("keeps comparison operators in the excerpt (same rule as sanitizeHtml)", async () => {
+    mockPrisma.article.findMany.mockResolvedValue([
+      article({ body: "<p>The team proved x < y and z > w today.</p>" }),
+    ]);
+
+    expect(firstArticle(await searchAll("title")).excerpt).toBe(
+      "The team proved x < y and z > w today.",
+    );
+  });
+
+  it("ends a truncated excerpt with an ellipsis, still within the cap", async () => {
+    mockPrisma.article.findMany.mockResolvedValue([
+      article({ body: "lorem ipsum ".repeat(400) }),
+    ]);
+
+    const { excerpt } = firstArticle(await searchAll("title"));
+
+    expect(excerpt.endsWith("…")).toBe(true);
+    expect(excerpt.length).toBeLessThanOrEqual(SEARCH_EXCERPT_MAX);
+  });
+
   it("tolerates a null body", async () => {
     mockPrisma.article.findMany.mockResolvedValue([article({ body: null })]);
 
