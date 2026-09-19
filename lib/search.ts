@@ -1,5 +1,14 @@
 import { prisma } from "@/lib/prisma";
 import { userMinimalNameSelect } from "@/lib/prisma-selects";
+import { getPreviewText } from "@/lib/article-helpers";
+
+// Results carry a short excerpt, never the full decrypted body: 30 article bodies is megabytes
+// of JSON for a list view that shows two lines of each.
+export const SEARCH_EXCERPT_MAX = 300;
+
+// Queries longer than this can't match anything useful and only widen the surface of the
+// `contains` scan. Capped here so both callers (the page and GET /api/search) inherit it.
+export const SEARCH_QUERY_MAX = 100;
 
 // One search result, discriminated by `kind`. Articles and print-issue PDFs are interleaved
 // in a single list (most-recent first), so the client renders each row by its kind.
@@ -9,7 +18,7 @@ export type SearchResultItem =
       id: string;
       title: string;
       slug: string;
-      body: string;
+      excerpt: string;
       section: string;
       publishedAt: string | null;
       authorName: string;
@@ -40,18 +49,24 @@ export function issueLabel(g: {
   return g.pdfFilename ?? "Issue PDF";
 }
 
+// Tag-stripped, length-bounded preview of a body. `getPreviewText` appends an ellipsis, so
+// clamp afterwards to keep the hard `SEARCH_EXCERPT_MAX` promise.
+function toExcerpt(body: string | null): string {
+  const preview = getPreviewText(body ?? "", SEARCH_EXCERPT_MAX);
+  return preview.length > SEARCH_EXCERPT_MAX ? preview.slice(0, SEARCH_EXCERPT_MAX) : preview;
+}
+
 export async function searchAll(query: string): Promise<SearchResultItem[]> {
-  const q = query.trim();
+  const q = query.trim().slice(0, SEARCH_QUERY_MAX);
   if (!q) return [];
 
   const [articles, issueGroups] = await Promise.all([
     prisma.article.findMany({
+      // Title only. `body` is random-mode encrypted, so the legacy plaintext column is NULL for
+      // every row — a `{ body: { contains } }` branch matches nothing and raises nothing.
       where: {
         group: { status: "PUBLISHED" },
-        OR: [
-          { title: { contains: q, mode: "insensitive" } },
-          { body: { contains: q, mode: "insensitive" } },
-        ],
+        title: { contains: q, mode: "insensitive" },
       },
       orderBy: { group: { publishedAt: "desc" } },
       take: 30,
@@ -89,7 +104,7 @@ export async function searchAll(query: string): Promise<SearchResultItem[]> {
         id: a.id,
         title: a.title,
         slug: a.slug,
-        body: a.body ?? "",
+        excerpt: toExcerpt(a.body),
         section: a.section,
         publishedAt: a.group?.publishedAt?.toISOString() ?? null,
         authorName: author.name,
