@@ -187,6 +187,10 @@ const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 function ImageField({ defaultUrl }: { defaultUrl: string }) {
   const [url, setUrl] = useState(defaultUrl);
+  // Articles saved before featured images moved to S3 still hold a base64 data URL. The server
+  // action rejects those now, so say so up front instead of letting the save blow up.
+  // scripts/migrate-featured-images-to-s3.ts converts them in bulk.
+  const isLegacyDataUrl = url.startsWith("data:");
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
@@ -291,6 +295,12 @@ function ImageField({ defaultUrl }: { defaultUrl: string }) {
             JPG, PNG, or WebP &middot; max 10MB
           </span>
         </button>
+      )}
+      {isLegacyDataUrl && !error && (
+        <p role="alert" className="font-headline text-[12px] text-maroon mt-1.5">
+          This image was stored before uploads moved to S3. Remove it and upload it again before
+          saving.
+        </p>
       )}
       {error && (
         <p role="alert" className="font-headline text-[12px] text-maroon mt-1.5">
