@@ -117,10 +117,16 @@ export const updateRoleSchema = z.object({
 });
 
 // `q` is interpolated into the Google Admin SDK Directory query language, which understands
-// `field:value`, `field=value` and `OR`. The allow-list keeps letters/digits/underscore plus the
-// punctuation that occurs in real names and emails (`.`, `@`, `'`, `-`, space) and excludes `:`
-// and `=`, so no extra predicate (`isAdmin=true`, `orgUnitPath=…`) can be smuggled in.
-export const DIRECTORY_QUERY_PATTERN = /^[\w.@' -]+$/;
+// `field:value`, `field=value` and `OR`. The allow-list keeps letters/marks/digits/underscore
+// plus the punctuation that occurs in real names and emails (`.`, `@`, `'`, `-`, space) and
+// excludes `:` and `=`, so no extra predicate (`isAdmin=true`, `orgUnitPath=…`) can be smuggled
+// in. Unicode-aware on purpose: `\w` is ASCII-only and would reject José, Müller and Nuñez.
+//
+// THE CHARACTER CLASS BELOW IS THE SINGLE SOURCE OF TRUTH. `lib/google-directory.ts` builds its
+// negated stripping regex from this same string so the two can never drift apart.
+export const DIRECTORY_QUERY_CHAR_CLASS = "\\p{L}\\p{M}\\p{N}_.@' -";
+
+export const DIRECTORY_QUERY_PATTERN = new RegExp(`^[${DIRECTORY_QUERY_CHAR_CLASS}]+$`, "u");
 
 export const directorySearchSchema = z.object({
   q: z
@@ -128,7 +134,10 @@ export const directorySearchSchema = z.object({
     .trim()
     .min(1, "Query required")
     .max(100)
-    .regex(DIRECTORY_QUERY_PATTERN, "Query may only contain letters, numbers, . @ ' - and spaces"),
+    .regex(
+      DIRECTORY_QUERY_PATTERN,
+      "Query may only contain letters, numbers, . @ ' - and spaces",
+    ),
 });
 
 // ---------------------------------------------------------------------------

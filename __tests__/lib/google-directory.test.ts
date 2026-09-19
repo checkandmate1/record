@@ -66,6 +66,14 @@ describe("sanitizeDirectoryQuery", () => {
     expect(sanitizeDirectoryQuery("Mary-Jane O'Brien")).toBe("Mary-Jane O'Brien");
   });
 
+  it("passes through non-ASCII letters and combining marks", () => {
+    expect(sanitizeDirectoryQuery("José")).toBe("José");
+    expect(sanitizeDirectoryQuery("Müller")).toBe("Müller");
+    expect(sanitizeDirectoryQuery("Nuñez")).toBe("Nuñez");
+    // Decomposed form: base letter + combining acute accent.
+    expect(sanitizeDirectoryQuery("José")).toBe("José");
+  });
+
   it("strips the Admin SDK operators that make a predicate", () => {
     // `:` and `=` are what turn text into `field:value` / `field=value`; without them no extra
     // clause can be smuggled into the query string.
@@ -114,10 +122,22 @@ describe("directorySearchSchema", () => {
     expect(directorySearchSchema.safeParse({ q: "Mary-Jane O'Brien" }).success).toBe(true);
   });
 
+  it("accepts accented and non-Latin names", () => {
+    for (const name of ["José", "Müller", "Nuñez", "José", "Ünal", "Λευκός", "李雷"]) {
+      expect(directorySearchSchema.safeParse({ q: name }).success).toBe(true);
+    }
+  });
+
   it("rejects query-language characters", () => {
     expect(directorySearchSchema.safeParse({ q: "a OR isAdmin=true" }).success).toBe(false);
     expect(directorySearchSchema.safeParse({ q: "name:jane" }).success).toBe(false);
     expect(directorySearchSchema.safeParse({ q: "<script>" }).success).toBe(false);
+  });
+
+  it("still rejects ':' and '=' even next to accented letters", () => {
+    expect(directorySearchSchema.safeParse({ q: "José:admin" }).success).toBe(false);
+    expect(directorySearchSchema.safeParse({ q: "Müller OR isAdmin=true" }).success).toBe(false);
+    expect(directorySearchSchema.safeParse({ q: "Nuñez=1" }).success).toBe(false);
   });
 
   it("rejects empty and over-long queries", () => {

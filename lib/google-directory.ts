@@ -2,6 +2,7 @@
 // monolithic `googleapis` — the latter bundles types for every Google API and OOM-kills the
 // production build on the 1 GB Linode box.
 import { admin, auth as googleAuth } from "@googleapis/admin";
+import { DIRECTORY_QUERY_CHAR_CLASS } from "@/lib/validations";
 
 const SCOPES = ["https://www.googleapis.com/auth/admin.directory.user.readonly"];
 
@@ -57,13 +58,17 @@ async function directoryClient() {
   return admin({ version: "directory_v1", auth: jwt });
 }
 
+// Negated form of the allow-list in `lib/validations.ts` — built from the same exported string
+// so the schema and this stripper can never drift apart.
+const DISALLOWED = new RegExp(`[^${DIRECTORY_QUERY_CHAR_CLASS}]+`, "gu");
+
 // Defence in depth for the Directory query language (`field:value`, `field=value`, `OR`).
-// `directorySearchSchema` already rejects anything outside this allow-list at the API boundary;
+// `directorySearchSchema` already rejects anything outside the allow-list at the API boundary;
 // this strips it again here so a direct call can't build a predicate either. `:` and `=` are
 // what make a predicate, so removing them is what actually closes the injection.
 export function sanitizeDirectoryQuery(query: string): string {
   return query
-    .replace(/[^\w.@' -]+/g, " ")
+    .replace(DISALLOWED, " ")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 100)
