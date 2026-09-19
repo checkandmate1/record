@@ -179,6 +179,10 @@ export function ArticleForm({
   );
 }
 
+// Must match FEATURED_IMAGE_MAX in lib/validations.ts — the server action rejects anything
+// larger, so catch it here instead of failing the whole form submission.
+const FEATURED_IMAGE_MAX_CHARS = 1_000_000;
+
 function ImageField({ defaultUrl }: { defaultUrl: string }) {
   const [url, setUrl] = useState(defaultUrl);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -188,7 +192,13 @@ function ImageField({ defaultUrl }: { defaultUrl: string }) {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      if (typeof reader.result === "string") setUrl(reader.result);
+      if (typeof reader.result !== "string") return;
+      if (reader.result.length > FEATURED_IMAGE_MAX_CHARS) {
+        alert("That image is too large. Please choose a file under about 700 KB.");
+        if (fileRef.current) fileRef.current.value = "";
+        return;
+      }
+      setUrl(reader.result);
     };
     reader.readAsDataURL(file);
   }

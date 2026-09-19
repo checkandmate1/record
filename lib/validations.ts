@@ -119,3 +119,95 @@ export const updateRoleSchema = z.object({
 export const directorySearchSchema = z.object({
   q: z.string().trim().min(1, "Query required").max(100),
 });
+
+// ---------------------------------------------------------------------------
+// Server-action payloads
+// ---------------------------------------------------------------------------
+// Server actions are a public HTTP surface — anything a browser can POST reaches them — so the
+// dashboard/account actions validate their assembled FormData exactly like a route handler
+// validates a JSON body. Keep these at the END of the file (see app/dashboard/CLAUDE.md).
+
+/** Max ArticleCredit rows one article may carry. Bounds the FormData scan in article-actions. */
+export const MAX_ARTICLE_CREDITS = 50;
+/** A round table is always exactly two sides (see app/dashboard/roundtable-actions.ts). */
+export const ROUND_TABLE_SIDES = 2;
+/** Max turns in one round table. Bounds the FormData scan in roundtable-actions. */
+export const MAX_ROUND_TABLE_TURNS = 100;
+/** Max authors listed on one round-table side. */
+export const MAX_SIDE_AUTHORS = 20;
+
+const SECTION_VALUES = [
+  "NEWS",
+  "OPINIONS",
+  "LIONS_DEN",
+  "A_AND_E",
+  "FEATURES",
+  "THE_ROUNDTABLE",
+  "MD_ALUMNI",
+] as const;
+
+// Row ids are Prisma `uuid()` everywhere in this schema (prisma/schema.prisma), so id fields
+// validate as uuid — matching createArticleSchema above.
+const rowId = z.string().uuid("Invalid id");
+
+export const articleActionSchema = z.object({
+  title: z.string().min(1, "Title is required").max(300, "Title must be 300 characters or fewer"),
+  body: z.string().min(1, "Body is required").max(102400, "Body must be under 100 KB"),
+  section: z.enum(SECTION_VALUES),
+  featuredImage: safeUrl(true)
+    .max(FEATURED_IMAGE_MAX, "Image must be under 1 MB")
+    .nullable()
+    .optional(),
+  credits: z
+    .array(
+      z.object({
+        userId: rowId,
+        creditRole: z.string().min(1).max(100, "Credit role must be 100 characters or fewer"),
+      }),
+    )
+    .max(MAX_ARTICLE_CREDITS, `An article can have at most ${MAX_ARTICLE_CREDITS} authors`),
+});
+
+export type ArticleActionInput = z.infer<typeof articleActionSchema>;
+
+export const roundTableActionSchema = z.object({
+  prompt: z
+    .string()
+    .min(1, "Prompt is required")
+    .max(500, "Prompt must be 500 characters or fewer"),
+  sides: z
+    .array(
+      z.object({
+        id: rowId.nullable(),
+        label: z.string().min(1).max(80, "Side label must be 80 characters or fewer"),
+        authorIds: z
+          .array(rowId)
+          .max(MAX_SIDE_AUTHORS, `A side can have at most ${MAX_SIDE_AUTHORS} authors`),
+      }),
+    )
+    .length(ROUND_TABLE_SIDES, "A round table must have exactly two sides"),
+  turns: z
+    .array(z.object({ body: z.string().min(1).max(102400, "Turn must be under 100 KB") }))
+    .max(MAX_ROUND_TABLE_TURNS, `A round table can have at most ${MAX_ROUND_TABLE_TURNS} turns`),
+});
+
+export type RoundTableActionInput = z.infer<typeof roundTableActionSchema>;
+
+// Profile pictures are either a base64 data URL written straight into User.image (encrypted at
+// rest) or the Google account photo URL persisted at sign-in. Anything else — notably
+// `javascript:` and arbitrary `data:` payloads — is rejected.
+const PROFILE_IMAGE_DATA_URL_MAX = 1_000_000; // ~1 MB of characters
+const PROFILE_IMAGE_URL_MAX = 2048; // 2 KB
+const PROFILE_IMAGE_DATA_URL_RE = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/\r\n]+={0,2}$/;
+
+export const profilePictureSchema = z.string().refine(
+  (v) => {
+    if (v.startsWith("data:")) {
+      return v.length <= PROFILE_IMAGE_DATA_URL_MAX && PROFILE_IMAGE_DATA_URL_RE.test(v);
+    }
+    return v.startsWith("https://") && v.length <= PROFILE_IMAGE_URL_MAX && isAllowedUrl(v, false);
+  },
+  {
+    message: "Profile picture must be a PNG, JPEG or WebP data URL under 1 MB, or an https:// URL",
+  },
+);
