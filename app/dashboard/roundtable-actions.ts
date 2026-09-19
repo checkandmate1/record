@@ -175,7 +175,9 @@ export async function updateRoundTable(id: string, formData: FormData) {
   // The slug is derived from the prompt; it used to be minted once at creation and never
   // updated, so every round table kept the "untitled-round-table" URL forever.
   const promptChanged = (existing.prompt ?? "") !== data.prompt;
-  const slug = promptChanged ? await generateUniqueRoundTableSlug(data.prompt) : undefined;
+  // `id` is excluded from the collision check so a prompt that slugifies back to this row's
+  // own current slug does not come back as "…-2".
+  const slug = promptChanged ? await generateUniqueRoundTableSlug(data.prompt, id) : undefined;
 
   // Sides and turns are "delete all, recreate". Without a transaction a failure part-way left
   // the round table with no turns (or turns pointing at a half-updated set of sides).
