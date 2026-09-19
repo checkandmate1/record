@@ -33,7 +33,9 @@ export function RoundTableFullPattern({
 
   return (
     <Link
-      href="/roundtable"
+      // This issue's debate, not whatever is newest: on /?page=2 a bare
+      // "/roundtable" points at the wrong edition.
+      href={`/roundtable/${roundTable.slug}`}
       className="group block rounded-sm border border-maroon/30 bg-gradient-to-br from-[rgba(139,26,26,0.06)] via-white to-[rgba(26,26,26,0.05)] px-6 py-8 sm:px-12 sm:py-12 hover:border-maroon transition-colors"
     >
       <div className="text-center">
