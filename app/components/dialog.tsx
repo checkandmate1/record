@@ -45,6 +45,8 @@ export interface DialogProps {
   open: boolean;
   /** Called on Escape, on a backdrop click, and by the caller's own controls. */
   onClose: () => void;
+  /** Id put on the dialog panel, so a trigger can point at it with `aria-controls`. */
+  id?: string;
   /** Id of the element (usually the dialog's heading) that names the dialog. */
   labelledBy?: string;
   /** Fallback accessible name when there is no visible heading to point at. */
@@ -59,12 +61,13 @@ export interface DialogProps {
   backdrop?: boolean;
   /** Lock `body` scrolling while open (default `true`). */
   lockScroll?: boolean;
-  children: ReactNode;
+  children?: ReactNode;
 }
 
 export function Dialog({
   open,
   onClose,
+  id,
   labelledBy,
   label,
   className = "",
@@ -165,6 +168,7 @@ export function Dialog({
       )}
       <div
         ref={panelRef}
+        id={id}
         role="dialog"
         aria-modal="true"
         aria-labelledby={labelledBy}
