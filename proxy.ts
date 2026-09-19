@@ -54,10 +54,13 @@ export default auth((req) => {
   // exempt so anonymous visitors can reach the sign-in flow. Everything else requires a session.
   // API routes get a JSON 401; pages get a redirect to /login with callbackUrl preserved so
   // deep-links return to the intended URL after sign-in.
+  // /robots.txt is exempt too: it is `disallow: /` (app/robots.ts) and crawlers never sign in,
+  // so gating it meant crawlers saw the login page instead of the directive to stay out.
   const isAuthExempt =
     pathname.startsWith("/api/auth") ||
     pathname === "/login" ||
-    pathname === "/auth-error";
+    pathname === "/auth-error" ||
+    pathname === "/robots.txt";
 
   if (!isAuthExempt && !req.auth?.user) {
     if (pathname.startsWith("/api")) {
