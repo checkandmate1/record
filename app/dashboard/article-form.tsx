@@ -179,28 +179,79 @@ export function ArticleForm({
   );
 }
 
-// Must match FEATURED_IMAGE_MAX in lib/validations.ts — the server action rejects anything
-// larger, so catch it here instead of failing the whole form submission.
-const FEATURED_IMAGE_MAX_CHARS = 1_000_000;
+// Featured images go through the same presigned-S3 flow as slot media (app/patterns/editable.tsx):
+// POST /api/upload for a presigned PUT, PUT the bytes straight to S3, then submit the returned
+// https URL. Nothing base64 ever reaches the server. Caps mirror `uploadRequestSchema`.
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 function ImageField({ defaultUrl }: { defaultUrl: string }) {
   const [url, setUrl] = useState(defaultUrl);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
-  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+  function reset() {
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result !== "string") return;
-      if (reader.result.length > FEATURED_IMAGE_MAX_CHARS) {
-        alert("That image is too large. Please choose a file under about 700 KB.");
-        if (fileRef.current) fileRef.current.value = "";
+    setError("");
+
+    if (!ALLOWED_TYPES.has(file.type)) {
+      setError("File type must be JPEG, PNG, or WebP.");
+      reset();
+      return;
+    }
+    if (file.size > MAX_FILE_SIZE) {
+      setError(`File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Max is 10 MB.`);
+      reset();
+      return;
+    }
+
+    setUploading(true);
+    try {
+      // Step 1: ask the API for a presigned S3 URL.
+      const presignRes = await fetch("/api/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: file.name,
+          contentType: file.type,
+          contentLength: file.size,
+        }),
+      });
+      if (!presignRes.ok) {
+        const err = await presignRes.json().catch(() => ({}));
+        setError(err?.error?.message ?? "Upload failed (presign).");
+        reset();
         return;
       }
-      setUrl(reader.result);
-    };
-    reader.readAsDataURL(file);
+      const { uploadUrl, publicUrl } = await presignRes.json();
+
+      // Step 2: upload the bytes directly to S3.
+      const putRes = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      if (!putRes.ok) {
+        setError("Upload failed (S3).");
+        reset();
+        return;
+      }
+
+      // Step 3: the hidden input now carries the URL the server action will store.
+      setUrl(publicUrl);
+      reset();
+    } catch (err) {
+      setError(`Upload failed: ${(err as Error).message}`);
+      reset();
+    } finally {
+      setUploading(false);
+    }
   }
 
   return (
@@ -210,6 +261,7 @@ function ImageField({ defaultUrl }: { defaultUrl: string }) {
       </label>
       {url ? (
         <div className="relative inline-block">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={url}
             alt="Preview"
@@ -217,7 +269,9 @@ function ImageField({ defaultUrl }: { defaultUrl: string }) {
           />
           <button
             type="button"
-            onClick={() => { setUrl(""); if (fileRef.current) fileRef.current.value = ""; }}
+            onClick={() => { setUrl(""); setError(""); reset(); }}
+            title="Remove image"
+            aria-label="Remove image"
             className="cursor-pointer absolute top-2 right-2 bg-white/90 border border-ink/10 w-6 h-6 flex items-center justify-center text-caption hover:text-maroon transition-colors text-[14px]"
           >
             &times;
@@ -226,16 +280,22 @@ function ImageField({ defaultUrl }: { defaultUrl: string }) {
       ) : (
         <button
           type="button"
+          disabled={uploading}
           onClick={() => fileRef.current?.click()}
-          className="cursor-pointer w-full border-2 border-dashed border-ink/20 px-4 py-8 text-center hover:border-maroon/40 transition-colors"
+          className="cursor-pointer w-full border-2 border-dashed border-ink/20 px-4 py-8 text-center hover:border-maroon/40 transition-colors disabled:cursor-wait disabled:opacity-60"
         >
           <span className="block font-headline text-[15px] tracking-wide text-caption/60">
-            Click to upload an image
+            {uploading ? "Uploading\u2026" : "Click to upload an image"}
           </span>
           <span className="block font-headline text-[12px] text-caption/30 mt-1">
-            JPG, PNG, or WebP
+            JPG, PNG, or WebP &middot; max 10MB
           </span>
         </button>
+      )}
+      {error && (
+        <p role="alert" className="font-headline text-[12px] text-maroon mt-1.5">
+          {error}
+        </p>
       )}
       <input
         ref={fileRef}
