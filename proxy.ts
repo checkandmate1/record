@@ -49,8 +49,17 @@ function buildCsp(nonce: string): string {
 export default auth((req) => {
   const { pathname, search } = req.nextUrl;
 
-  // A fresh nonce per request (the whole site renders dynamically behind the auth gate, so
-  // there are no build-time-rendered pages that would miss it).
+  // A fresh nonce per request. A nonce only reaches a page that renders per request, so every
+  // route must be dynamic: the site-wide auth gate makes all real pages dynamic, and
+  // `app/not-found.tsx` calls `await connection()` because `/_not-found` would otherwise be
+  // prerendered at build time with nonce-less scripts.
+  //
+  // KNOWN GAP: `/_global-error` is still prerendered (verified in `.next/prerender-manifest.json`
+  // after a build — its HTML carries 10 script tags with no nonce). It is Next's built-in
+  // last-resort page for a root-layout crash and must be a client component, so there is no
+  // dynamic API to call in it. Consequence: in that one case the page renders but never
+  // hydrates, so its "Try again" button is dead and the console logs CSP errors; a manual
+  // reload still works. `/robots.txt` and `/favicon.ico` are also static but carry no scripts.
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
   const csp = buildCsp(nonce);
 
