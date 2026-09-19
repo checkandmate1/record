@@ -6,21 +6,49 @@
 //
 // Before the fix, step 4 fails because step 3's `dek.fill(0)` zeros the cached DEK.
 //
+// It writes and deletes a real User row, so it refuses to run against a non-local database
+// unless ALLOW_PROD=1 is set explicitly. Note that .env in this repo points at PRODUCTION.
+//
 // Usage:
-//   DATABASE_URL=postgresql://localhost:5432/record_local_prod \
-//   npx tsx scripts/test-dek-cache-corruption.ts
+//   DATABASE_URL=postgresql://localhost:5432/record_local \
+//   npx ts-node -r dotenv/config -r tsconfig-paths/register \
+//     --compiler-options '{"module":"CommonJS"}' scripts/test-dek-cache-corruption.ts
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 require("dotenv").config({ path: require("path").resolve(__dirname, "../.env") });
 
+import { randomUUID } from "crypto";
+
+// --- safety gate: local databases only, unless ALLOW_PROD=1 ---------------------------------
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1"]);
+
+function databaseHost(url: string | undefined): string {
+  if (!url) return "";
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "";
+  }
+}
+
+const host = databaseHost(process.env.DATABASE_URL);
+if (!LOCAL_HOSTS.has(host) && process.env.ALLOW_PROD !== "1") {
+  console.error(
+    `Refusing to run: DATABASE_URL host is "${host || "unparseable"}", not localhost.\n` +
+      "This script creates and deletes a real User row. Point DATABASE_URL at a local database, " +
+      "or set ALLOW_PROD=1 if you really mean to touch that server.",
+  );
+  process.exit(1);
+}
+
+// Imported after the gate so a refused run never opens a connection to the wrong database.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { prisma } = require("../lib/prisma") as typeof import("../lib/prisma");
-import { randomUUID } from "crypto";
 
 const TEST_EMAIL = `test-${randomUUID()}@horacemann.org`;
 
 async function main() {
-  console.log(`Target: ${process.env.DATABASE_URL}`);
+  console.log(`Target host: ${host || "unknown"} (db url masked)`);
   console.log(`Test email: ${TEST_EMAIL}\n`);
 
   console.log("Step 1: create user");

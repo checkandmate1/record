@@ -4,21 +4,30 @@ import {
   DecryptCommand,
 } from "@aws-sdk/client-kms";
 
-const KEK = process.env.KMS_KEY_ARN;
-const REGION = process.env.AWS_REGION ?? "us-east-1";
+// Read the env lazily rather than at module load: instrumentation, the Prisma extension and the
+// test suite all import this module at unpredictable points, and a module-load snapshot made
+// `KMS_KEY_ARN` impossible to change after the fact (and untestable).
+function kek(): string | undefined {
+  return process.env.KMS_KEY_ARN;
+}
 
 let cachedClient: KMSClient | null = null;
 function client(): KMSClient {
-  if (!cachedClient) cachedClient = new KMSClient({ region: REGION });
+  if (!cachedClient) {
+    cachedClient = new KMSClient({ region: process.env.AWS_REGION ?? "us-east-1" });
+  }
   return cachedClient;
 }
 
 export function isKmsConfigured(): boolean {
-  return !!KEK;
+  return Boolean(process.env.KMS_KEY_ARN);
 }
 
 // Plaintext DEK cache so a request that touches the same row N times only burns one KMS Decrypt call.
-// Keyed by base64(wrappedDek). The homepage fans out to 20-30+ encrypted rows per render; without a
+// Keyed by `recordType:recordId:base64(wrappedDek)` — the encryption context is part of the key so a
+// wrapped DEK copied onto a different row (by anyone with DB write access) cannot be unwrapped out of
+// this cache; it has to go to KMS, which enforces the context and rejects it.
+// The homepage fans out to 20-30+ encrypted rows per render; without a
 // cross-request cache, consecutive page loads each spend that many KMS Decrypt calls (tripping the
 // CloudWatch decrypt-spike alarm and adding ~1s of KMS round-trip latency on warm renders).
 // 10 min is long enough that a normal browsing session reuses the same DEKs, short enough that a
@@ -38,10 +47,11 @@ export type EncryptionContext = { recordType: string; recordId: string };
 export async function generateDek(
   ctx: EncryptionContext,
 ): Promise<{ dek: Buffer; wrappedDek: Buffer; kekVersion: number }> {
-  if (!KEK) throw new Error("KMS_KEY_ARN is not set");
+  const keyId = kek();
+  if (!keyId) throw new Error("KMS_KEY_ARN is not set");
   const out = await client().send(
     new GenerateDataKeyCommand({
-      KeyId: KEK,
+      KeyId: keyId,
       KeySpec: "AES_256",
       EncryptionContext: ctx as Record<string, string>,
     }),
@@ -61,10 +71,10 @@ export async function unwrapDek(
   wrappedDek: Buffer,
   ctx: EncryptionContext,
 ): Promise<Buffer> {
-  if (!KEK) throw new Error("KMS_KEY_ARN is not set");
+  if (!kek()) throw new Error("KMS_KEY_ARN is not set");
 
   evictExpired();
-  const cacheKey = wrappedDek.toString("base64");
+  const cacheKey = `${ctx.recordType}:${ctx.recordId}:${wrappedDek.toString("base64")}`;
   const cached = dekCache.get(cacheKey);
   // Return a fresh copy each time so callers can `dek.fill(0)` to wipe their plaintext copy
   // after use without corrupting the cached entry. Without this, an update path that calls
