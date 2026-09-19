@@ -116,8 +116,19 @@ export const updateRoleSchema = z.object({
   role: z.enum(ALL_ROLES),
 });
 
+// `q` is interpolated into the Google Admin SDK Directory query language, which understands
+// `field:value`, `field=value` and `OR`. The allow-list keeps letters/digits/underscore plus the
+// punctuation that occurs in real names and emails (`.`, `@`, `'`, `-`, space) and excludes `:`
+// and `=`, so no extra predicate (`isAdmin=true`, `orgUnitPath=…`) can be smuggled in.
+export const DIRECTORY_QUERY_PATTERN = /^[\w.@' -]+$/;
+
 export const directorySearchSchema = z.object({
-  q: z.string().trim().min(1, "Query required").max(100),
+  q: z
+    .string()
+    .trim()
+    .min(1, "Query required")
+    .max(100)
+    .regex(DIRECTORY_QUERY_PATTERN, "Query may only contain letters, numbers, . @ ' - and spaces"),
 });
 
 // ---------------------------------------------------------------------------

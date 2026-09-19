@@ -57,13 +57,33 @@ async function directoryClient() {
   return admin({ version: "directory_v1", auth: jwt });
 }
 
+// Defence in depth for the Directory query language (`field:value`, `field=value`, `OR`).
+// `directorySearchSchema` already rejects anything outside this allow-list at the API boundary;
+// this strips it again here so a direct call can't build a predicate either. `:` and `=` are
+// what make a predicate, so removing them is what actually closes the injection.
+export function sanitizeDirectoryQuery(query: string): string {
+  return query
+    .replace(/[^\w.@' -]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 100)
+    .trim();
+}
+
+// The Admin SDK query for a prefix match on email or full name. Exported for unit testing.
+export function buildDirectoryQuery(query: string): string {
+  const q = sanitizeDirectoryQuery(query);
+  if (!q) return "";
+  return `email:${q}* OR name:${q}*`;
+}
+
 export async function searchDirectory(query: string): Promise<DirectoryPerson[]> {
-  const q = query.trim();
+  const q = buildDirectoryQuery(query);
   if (!q) return [];
   const dir = await directoryClient();
   const res = await dir.users.list({
     customer: "my_customer",
-    query: `email:${q}* OR name:${q}*`,
+    query: q,
     viewType: "domain_public",
     maxResults: 10,
     orderBy: "email",
