@@ -42,6 +42,7 @@ describe("GET /api/users", () => {
     expect(mockFindMany).toHaveBeenCalledWith(
       expect.objectContaining({
         select: expect.objectContaining({
+          id: true,
           encryptedDek: true,
           dekKekVersion: true,
           nameCiphertext: true,
@@ -81,6 +82,7 @@ describe("GET /api/users/me", () => {
     expect(mockFindUnique).toHaveBeenCalledWith(
       expect.objectContaining({
         select: expect.objectContaining({
+          id: true,
           encryptedDek: true,
           dekKekVersion: true,
           nameCiphertext: true,
@@ -110,6 +112,7 @@ describe("GET /api/users/[id]", () => {
     expect(mockFindUnique).toHaveBeenCalledWith(
       expect.objectContaining({
         select: expect.objectContaining({
+          id: true,
           encryptedDek: true,
           dekKekVersion: true,
           nameCiphertext: true,
