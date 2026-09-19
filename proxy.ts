@@ -118,8 +118,13 @@ export default auth((req) => {
   // deep-links return to the intended URL after sign-in.
   // /robots.txt is exempt too: it is `disallow: /` (app/robots.ts) and crawlers never sign in,
   // so gating it meant crawlers saw the login page instead of the directive to stay out.
+  // /api/cron/* is exempt because it is called by the box's own cron job, which has no session.
+  // It authenticates itself with `Authorization: Bearer $CRON_SECRET` (timing-safe compare in
+  // the handler) and answers 401 without it, so the route is not open — it just uses a
+  // different credential. The per-IP rate limit above still applies.
   const isAuthExempt =
     pathname.startsWith("/api/auth") ||
+    pathname.startsWith("/api/cron/") ||
     pathname === "/login" ||
     pathname === "/auth-error" ||
     pathname === "/robots.txt";

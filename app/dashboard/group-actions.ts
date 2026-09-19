@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { invalidateHomepage } from "@/lib/page-cache";
+import { publishGroupById } from "@/lib/publish-group";
 import { isDashboardRole, isEditorRole } from "@/lib/roles";
 import { PATTERNS } from "@/lib/patterns";
 import { deleteS3Object, getS3ObjectHead } from "@/lib/s3";
@@ -129,25 +130,10 @@ export async function publishGroup(id: string) {
   const session = await auth();
   requireEditor(session);
 
-  // An issue can't go public without a volume + issue number — those identify the edition
-  // everywhere (homepage masthead, search-by-"Issue X Volume X", the issue PDF label).
-  const group = await prisma.articleGroup.findUnique({
-    where: { id },
-    select: { volumeNumber: true, issueNumber: true },
-  });
-  if (!group) throw new Error("Issue not found");
-  if (group.volumeNumber == null || group.issueNumber == null) {
-    throw new Error("Set a volume number and issue number before publishing this issue.");
-  }
+  // Preconditions + write + cache invalidation live in lib/publish-group.ts so the scheduled
+  // publisher (POST /api/cron/publish-scheduled) runs the exact same path.
+  await publishGroupById(id);
 
-  await prisma.articleGroup.update({
-    where: { id },
-    data: { status: "PUBLISHED", publishedAt: new Date() },
-  });
-
-  revalidatePath("/");
-  invalidateHomepage();
-  revalidatePath("/dashboard");
   redirect(`/dashboard/groups/${id}`);
 }
 
