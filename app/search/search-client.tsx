@@ -25,15 +25,7 @@ const SECTION_HREFS: Record<string, string> = {
   MD_ALUMNI: "/section/md-alumni",
 };
 
-function stripHtml(html: string): string {
-  return html.replace(/<[^>]*>/g, "").trim();
-}
-
-function getExcerpt(body: string): string {
-  const plain = stripHtml(body);
-  if (plain.length <= 200) return plain;
-  return plain.slice(0, 200).replace(/\s+\S*$/, "") + "…";
-}
+// Excerpts are computed server-side (`lib/search.ts`) — the client never receives article bodies.
 
 function formatDate(date: string): string {
   return new Date(date).toLocaleDateString("en-US", {
@@ -174,7 +166,7 @@ export function SearchClient({ initialResults, initialQuery }: {
                     </h3>
 
                     <p className="text-[15px] leading-[1.6] text-caption mt-2">
-                      {getExcerpt(item.body)}
+                      {item.excerpt}
                     </p>
 
                     <div className="mt-3 font-headline text-[14px]">

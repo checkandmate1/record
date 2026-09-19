@@ -31,8 +31,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
       // Account-linking trusts the email to attach a Google login to an existing (placeholder)
       // row, so the email MUST be verified by Google — a domain suffix alone is not ownership.
+      // `!== true` rather than `=== false`: an absent claim is not proof of verification.
       const emailVerified = (profile as { email_verified?: boolean } | null)?.email_verified;
-      if (emailVerified === false) {
+      if (emailVerified !== true) {
+        return false;
+      }
+      // `hd` is the Workspace hosted-domain claim — asserted by Google about the account, not
+      // just a string the address happens to end with (a consumer gmail alias cannot forge it).
+      const hostedDomain = (profile as { hd?: string } | null)?.hd;
+      if (hostedDomain !== "horacemann.org") {
         return false;
       }
       // Persist the Google profile image so it survives custom uploads, and — if this row was a
