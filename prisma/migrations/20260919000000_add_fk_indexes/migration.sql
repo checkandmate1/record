@@ -5,7 +5,11 @@
 --
 -- RoundTable.groupId is intentionally NOT indexed here — it already carries a single-column
 -- UNIQUE constraint (`groupId String @unique`), which Postgres already backs with an index.
--- Adding a second one would be a pure duplicate.
+-- Adding a second one would be a pure duplicate. Same reasoning drops two more from the
+-- originally-requested list: ArticleCredit.articleId (leading column of the existing
+-- @@unique([articleId, userId, creditRoleHash])) and Approval.userId (leading column of both
+-- @@unique([userId, articleId]) and @@unique([userId, groupId])) — Postgres can already use
+-- those composite unique indexes for an equality lookup on just the leading column.
 
 CREATE INDEX "Session_userId_idx" ON "Session"("userId");
 CREATE INDEX "Account_userId_idx" ON "Account"("userId");
@@ -22,7 +26,6 @@ CREATE INDEX "BlockSlot_blockId_idx" ON "BlockSlot"("blockId");
 CREATE INDEX "BlockSlot_articleId_idx" ON "BlockSlot"("articleId");
 
 CREATE INDEX "ArticleCredit_userId_idx" ON "ArticleCredit"("userId");
-CREATE INDEX "ArticleCredit_articleId_idx" ON "ArticleCredit"("articleId");
 
 CREATE INDEX "ArticleImage_articleId_idx" ON "ArticleImage"("articleId");
 
@@ -31,6 +34,5 @@ CREATE INDEX "RoundTableTurn_sideId_idx" ON "RoundTableTurn"("sideId");
 
 CREATE INDEX "Approval_articleId_idx" ON "Approval"("articleId");
 CREATE INDEX "Approval_groupId_idx" ON "Approval"("groupId");
-CREATE INDEX "Approval_userId_idx" ON "Approval"("userId");
 
 CREATE INDEX "User_isPlaceholder_idx" ON "User"("isPlaceholder");

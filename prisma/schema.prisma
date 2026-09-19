@@ -152,7 +152,8 @@ model ArticleCredit {
 
   @@unique([articleId, userId, creditRoleHash])
   @@index([userId])
-  @@index([articleId])
+  // No separate @@index([articleId]) — it's the leading column of the unique constraint above,
+  // so Postgres can already use that composite index for an equality lookup on articleId alone.
 }
 
 model ArticleImage {
@@ -347,5 +348,6 @@ model Approval {
   @@unique([userId, groupId])
   @@index([articleId])
   @@index([groupId])
-  @@index([userId])
+  // No separate @@index([userId]) — it's the leading column of both unique constraints above,
+  // so Postgres can already use either composite index for an equality lookup on userId alone.
 }
