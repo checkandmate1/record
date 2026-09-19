@@ -21,6 +21,20 @@ describe("sanitizeHtml", () => {
     expect(sanitizeHtml("<em>a</em> and <em>b</em>")).toBe("a and b");
   });
 
+  // A single pass can leave behind fragments that form a *new* tag once the inner one is
+  // removed, so the strip repeats until the string stops changing.
+  it("does not let a nested tag reassemble into a real one", () => {
+    expect(sanitizeHtml("<<a>script>alert(1)<</a>/script>")).toBe("alert(1)");
+    expect(sanitizeHtml("<<div>p>text<</div>/p>")).toBe("text");
+    // Interleaved fragments leave harmless text residue, never a tag.
+    expect(sanitizeHtml("<scr<b>ipt>bad</scr<b>ipt>")).not.toMatch(/<\/?[a-zA-Z]/);
+  });
+
+  it("terminates on adversarial nesting instead of looping forever", () => {
+    const nested = "<".repeat(200) + "a>" + "x";
+    expect(() => sanitizeHtml(nested)).not.toThrow();
+  });
+
   it("leaves mathematical comparisons intact", () => {
     expect(sanitizeHtml("x < y and z > w")).toBe("x < y and z > w");
     expect(sanitizeHtml("if x < y then y > x")).toBe("if x < y then y > x");

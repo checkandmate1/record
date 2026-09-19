@@ -6,6 +6,19 @@
 // "3<5" and "temperature < 0 degrees" survive untouched. The previous `/<[^>]*>?/g` treated
 // every `<` as a tag opener and ate everything after it — irreversible data loss on any
 // math/science/CS piece. An unterminated tag is deliberately left alone for the same reason.
+//
+// The strip repeats until the string stops changing: one pass can leave fragments that close
+// up into a fresh tag (`<<a>script>alert(1)<</a>/script>` → `<script>alert(1)</script>`).
+// The pass count is bounded so pathological input can't spin.
+const TAG = /<\/?[a-zA-Z][^>]*>/g;
+const MAX_PASSES = 10;
+
 export function sanitizeHtml(dirty: string): string {
-  return dirty.replace(/<\/?[a-zA-Z][^>]*>/g, "").trim();
+  let out = dirty;
+  for (let i = 0; i < MAX_PASSES; i++) {
+    const next = out.replace(TAG, "");
+    if (next === out) break;
+    out = next;
+  }
+  return out.trim();
 }
