@@ -20,13 +20,25 @@ interface ArticleData {
   id: string;
   title: string;
   slug: string;
-  body: string;
+  // Encrypted field — decrypts to null on a KMS/DEK failure; code below (splitParagraphs,
+  // getPreviewText) already treats it as nullable.
+  body: string | null;
   excerpt: string | null;
   featuredImage: string | null;
   section: string;
   groupId: string;
-  createdBy: { id: string; name: string; role: string; image: string | null; displayTitle: string | null };
-  credits: { creditRole: string; user: { id: string; name: string; image: string | null } }[];
+  createdBy: {
+    id: string;
+    // Encrypted field — see `body` above.
+    name: string | null;
+    role: string;
+    image: string | null;
+    displayTitle: string | null;
+  };
+  credits: {
+    creditRole: string;
+    user: { id: string; name: string | null; image: string | null };
+  }[];
   images: { url: string; caption: string | null; altText: string }[];
   group: { issueNumber: number | null; volumeNumber: number | null; publishedAt: Date | null; status: string; pdfKey: string | null } | null;
 }
@@ -102,12 +114,12 @@ export default async function ArticlePage({
     article.credits.length > 0
       ? article.credits.map((c) => ({
           id: c.user.id,
-          name: c.user.name,
+          name: c.user.name ?? "",
           image: c.user.image ?? null,
         }))
       : [{
           id: article.createdBy.id,
-          name: article.createdBy.name,
+          name: article.createdBy.name ?? "",
           image: article.createdBy.image ?? null,
         }];
   const primaryRole = resolvePrimaryRole(article);
