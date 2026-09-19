@@ -1,6 +1,9 @@
 import { roleLabel } from "@/lib/roles";
 
-export function stripHtml(html: string): string {
+// Accepts null/undefined because encrypted fields (Article.body, RoundTableTurn.body, ...)
+// decrypt to null on a KMS/DEK failure — callers must render nothing, not throw a 500.
+export function stripHtml(html: string | null | undefined): string {
+  if (!html) return "";
   return html.replace(/<[^>]*>/g, "").trim();
 }
 
@@ -18,10 +21,19 @@ export function formatIssueTitle(group: {
   return group.name?.trim() || "Untitled Issue";
 }
 
-export function getPreviewText(body: string, maxLen = 200): string {
+export function getPreviewText(body: string | null | undefined, maxLen = 200): string {
   const plain = stripHtml(body);
+  if (plain.length === 0) return "";
   if (plain.length <= maxLen) return plain;
   return plain.slice(0, maxLen).replace(/\s+\S*$/, "") + "...";
+}
+
+// Single-letter avatar fallback. Accepts null/undefined for the same reason as stripHtml —
+// name is an encrypted field and comes back null on a decrypt failure.
+export function getInitials(name: string | null | undefined): string {
+  const trimmed = name?.trim();
+  if (!trimmed) return "?";
+  return trimmed.charAt(0).toUpperCase();
 }
 
 export function formatDateShort(date: Date): string {

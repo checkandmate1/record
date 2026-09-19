@@ -38,6 +38,18 @@ describe("GET /api/users", () => {
     const res = await listUsers(req);
 
     expect(res.status).toBe(200);
+    // Envelope columns must be present or name/email/image silently decrypt to null.
+    expect(mockFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({
+          id: true,
+          encryptedDek: true,
+          dekKekVersion: true,
+          nameCiphertext: true,
+          emailCiphertext: true,
+        }),
+      })
+    );
   });
 
   it("rejects non-admins", async () => {
@@ -67,6 +79,17 @@ describe("GET /api/users/me", () => {
     const res = await getMe(req);
 
     expect(res.status).toBe(200);
+    expect(mockFindUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({
+          id: true,
+          encryptedDek: true,
+          dekKekVersion: true,
+          nameCiphertext: true,
+          emailCiphertext: true,
+        }),
+      })
+    );
   });
 });
 
@@ -85,5 +108,17 @@ describe("GET /api/users/[id]", () => {
     const res = await getUser(req, { params: Promise.resolve({ id: "user-1" }) });
 
     expect(res.status).toBe(200);
+    // No email here (public profile) but name/image envelope columns are required.
+    expect(mockFindUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({
+          id: true,
+          encryptedDek: true,
+          dekKekVersion: true,
+          nameCiphertext: true,
+          imageCiphertext: true,
+        }),
+      })
+    );
   });
 });

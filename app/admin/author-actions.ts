@@ -6,6 +6,7 @@ import { getDirectoryUserByEmail } from "@/lib/google-directory";
 import { revalidatePath } from "next/cache";
 import { randomUUID } from "crypto";
 import { isAdminRole } from "@/lib/roles";
+import { userMinimalNameSelect } from "@/lib/prisma-selects";
 
 // Creating authors is a WEB_TEAM+ (admin-panel) action. Writers can still credit existing
 // placeholder authors via the article credit picker; they just can't mint new ones.
@@ -33,7 +34,7 @@ export async function addDirectoryAuthor(email: string): Promise<AddAuthorResult
   // emailHash blind index inside the Prisma extension.
   const existing = await prisma.user.findUnique({
     where: { email: normalized },
-    select: { id: true, name: true },
+    select: userMinimalNameSelect,
   });
   if (existing) {
     return { id: existing.id, name: existing.name ?? normalized };
@@ -52,7 +53,7 @@ export async function addDirectoryAuthor(email: string): Promise<AddAuthorResult
       role: "READER",
       isPlaceholder: true,
     } as never,
-    select: { id: true, name: true },
+    select: userMinimalNameSelect,
   });
 
   revalidatePath("/admin/authors");
@@ -83,7 +84,7 @@ export async function addManualAuthor(input: {
     // Dedup against an existing user (real or placeholder) when an email is provided.
     const existing = await prisma.user.findUnique({
       where: { email },
-      select: { id: true, name: true },
+      select: userMinimalNameSelect,
     });
     if (existing) return { id: existing.id, name: existing.name ?? name };
   }
@@ -98,7 +99,7 @@ export async function addManualAuthor(input: {
       role: "READER",
       isPlaceholder: true,
     } as never,
-    select: { id: true, name: true },
+    select: userMinimalNameSelect,
   });
 
   revalidatePath("/admin/authors");

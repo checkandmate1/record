@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { cache } from "react";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { userMinimalNameImageSelect } from "@/lib/prisma-selects";
@@ -11,6 +12,7 @@ import {
   formatDateLong,
   formatDateShort,
   getPreviewText,
+  getInitials,
 } from "@/lib/article-helpers";
 import { roleLabel } from "@/lib/roles";
 
@@ -18,18 +20,32 @@ interface ArticleData {
   id: string;
   title: string;
   slug: string;
-  body: string;
+  // Encrypted field — decrypts to null on a KMS/DEK failure; code below (splitParagraphs,
+  // getPreviewText) already treats it as nullable.
+  body: string | null;
   excerpt: string | null;
   featuredImage: string | null;
   section: string;
   groupId: string;
-  createdBy: { id: string; name: string; role: string; image: string | null; displayTitle: string | null };
-  credits: { creditRole: string; user: { id: string; name: string; image: string | null } }[];
+  createdBy: {
+    id: string;
+    // Encrypted field — see `body` above.
+    name: string | null;
+    role: string;
+    image: string | null;
+    displayTitle: string | null;
+  };
+  credits: {
+    creditRole: string;
+    user: { id: string; name: string | null; image: string | null };
+  }[];
   images: { url: string; caption: string | null; altText: string }[];
   group: { issueNumber: number | null; volumeNumber: number | null; publishedAt: Date | null; status: string; pdfKey: string | null } | null;
 }
 
-async function loadArticle(slug: string): Promise<ArticleData | null> {
+// Wrapped in React.cache() so generateMetadata and the page component share one query per
+// request instead of each independently hitting the DB (and re-paying the KMS decrypt cost).
+const loadArticle = cache(async (slug: string): Promise<ArticleData | null> => {
   const article = (await prisma.article.findFirst({
     where: { slug, group: { status: "PUBLISHED" } },
     include: {
@@ -40,7 +56,7 @@ async function loadArticle(slug: string): Promise<ArticleData | null> {
     },
   })) as unknown as ArticleData | null;
   return article;
-}
+});
 
 function resolvePrimaryRole(a: ArticleData): string | null {
   if (a.credits.length > 0) {
@@ -51,7 +67,8 @@ function resolvePrimaryRole(a: ArticleData): string | null {
   return fallback === "Reader" ? null : fallback;
 }
 
-function splitParagraphs(body: string): string[] {
+function splitParagraphs(body: string | null | undefined): string[] {
+  if (!body) return [];
   return body
     .split(/\n\s*\n/)
     .map((p) => p.trim())
@@ -97,12 +114,12 @@ export default async function ArticlePage({
     article.credits.length > 0
       ? article.credits.map((c) => ({
           id: c.user.id,
-          name: c.user.name,
+          name: c.user.name ?? "",
           image: c.user.image ?? null,
         }))
       : [{
           id: article.createdBy.id,
-          name: article.createdBy.name,
+          name: article.createdBy.name ?? "",
           image: article.createdBy.image ?? null,
         }];
   const primaryRole = resolvePrimaryRole(article);
@@ -153,7 +170,7 @@ export default async function ArticlePage({
                     />
                   ) : (
                     <div className="w-full h-full bg-maroon text-white flex items-center justify-center font-headline font-bold text-[13px]">
-                      {a.name.charAt(0).toUpperCase()}
+                      {getInitials(a.name)}
                     </div>
                   )}
                 </Link>
@@ -285,7 +302,7 @@ export default async function ArticlePage({
               />
             ) : (
               <div className="w-14 h-14 rounded-full bg-maroon text-white flex items-center justify-center font-headline font-bold text-[20px] shrink-0">
-                {primaryAuthor.name.charAt(0).toUpperCase()}
+                {getInitials(primaryAuthor.name)}
               </div>
             )}
             <div className="min-w-0">

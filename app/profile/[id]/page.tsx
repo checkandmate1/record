@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { cache } from "react";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { userMinimalNameSelect } from "@/lib/prisma-selects";
@@ -37,7 +38,9 @@ interface ArticleListItem {
 
 const PER_PAGE = 10;
 
-async function loadUser(id: string): Promise<UserData | null> {
+// Wrapped in React.cache() so generateMetadata and the page component share one query per
+// request instead of each independently hitting the DB (and re-paying the KMS decrypt cost).
+const loadUser = cache(async (id: string): Promise<UserData | null> => {
   const user = (await prisma.user.findUnique({
     where: { id },
     select: {
@@ -55,7 +58,7 @@ async function loadUser(id: string): Promise<UserData | null> {
     },
   })) as unknown as UserData | null;
   return user;
-}
+});
 
 function roleLabel(user: UserData): string | null {
   const label = user.displayTitle ?? roleDisplayName(user.role);

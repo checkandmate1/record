@@ -1,6 +1,7 @@
 import { auth, signOut } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { userPublicSelect } from "@/lib/prisma-selects";
 import { SubpageHeader } from "@/app/subpage-header";
 import { ProfilePicture } from "@/app/account/profile-picture";
 import { roleLabel } from "@/lib/roles";
@@ -14,10 +15,11 @@ export default async function AccountPage() {
 
   const { user } = session;
 
-  // Fetch full user data including image
+  // Fetch full user data including image. `image` is encrypted, so the select needs the
+  // envelope columns (userPublicSelect) or it silently decrypts to null.
   const dbUser = await prisma.user.findUnique({
     where: { id: user.id },
-    select: { image: true, googleImage: true, createdAt: true },
+    select: { ...userPublicSelect, googleImage: true, createdAt: true },
   });
 
   const profileImage = (dbUser as { image?: string | null } | null)?.image ?? user.image ?? null;

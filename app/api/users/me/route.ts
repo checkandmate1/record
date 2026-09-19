@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { checkAuth } from "@/lib/middleware/auth";
 import { errorResponse } from "@/lib/errors";
+import { userPublicWithEmailSelect } from "@/lib/prisma-selects";
 
 export async function GET(req: NextRequest) {
   const { session, error } = await checkAuth();
@@ -10,11 +11,7 @@ export async function GET(req: NextRequest) {
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: {
-      id: true,
-      email: true,
-      name: true,
-      image: true,
-      role: true,
+      ...userPublicWithEmailSelect,
       isAdmin: true,
       createdAt: true,
     },

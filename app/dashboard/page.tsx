@@ -32,8 +32,8 @@ export default async function DashboardPage({
 
   const groups = await prisma.articleGroup.findMany({
     orderBy: [
-      { volumeNumber: "desc" },
-      { issueNumber: "desc" },
+      { volumeNumber: { sort: "desc", nulls: "last" } },
+      { issueNumber: { sort: "desc", nulls: "last" } },
       { createdAt: "desc" },
     ],
     include: {

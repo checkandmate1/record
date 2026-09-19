@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { errorResponse } from "@/lib/errors";
+import { userPublicSelect } from "@/lib/prisma-selects";
 
 export async function GET(
   req: NextRequest,
@@ -11,10 +12,7 @@ export async function GET(
   const user = await prisma.user.findUnique({
     where: { id },
     select: {
-      id: true,
-      name: true,
-      image: true,
-      role: true,
+      ...userPublicSelect,
       createdAt: true,
       articleCredits: {
         where: { article: { group: { status: "PUBLISHED" } } },

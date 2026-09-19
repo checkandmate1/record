@@ -85,8 +85,8 @@ async function loadHomepageData(currentPage: number): Promise<HomepageData> {
   const groups = await prisma.articleGroup.findMany({
     where: { status: "PUBLISHED" },
     orderBy: [
-      { volumeNumber: "desc" },
-      { issueNumber: "desc" },
+      { volumeNumber: { sort: "desc", nulls: "last" } },
+      { issueNumber: { sort: "desc", nulls: "last" } },
       { publishedAt: "desc" },
     ],
   });
