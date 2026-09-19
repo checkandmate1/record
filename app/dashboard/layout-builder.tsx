@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   addBlock,
   deleteBlock,
@@ -54,6 +55,15 @@ interface BlockWithSlots {
   dividerStyle: string;
   slots: SlotData[];
 }
+
+/**
+ * Runs one block-level server action. Every mutation goes through this so the
+ * editor (a) awaits the action instead of firing and forgetting, (b) refreshes
+ * the route afterwards so the next click reads fresh block props rather than the
+ * stale array it was rendered with, and (c) shows the error inline instead of
+ * blowing up into the route error boundary.
+ */
+type RunAction = (fn: () => Promise<void>) => void;
 
 interface LayoutBuilderProps {
   groupId: string;
@@ -176,13 +186,37 @@ export function LayoutBuilder({
 }: LayoutBuilderProps) {
   const [pickingColumn, setPickingColumn] = useState<"main" | "sidebar" | "full" | null>(null);
   const [previewId, setPreviewId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, startTransition] = useTransition();
+  const router = useRouter();
 
-  async function handleSelect(patternId: string) {
+  // `busy` only updates on the next render, so two clicks dispatched in the same tick
+  // would both read `false`. The ref flips synchronously and is the real lock; `busy`
+  // just drives the disabled/"Saving…" chrome.
+  const inFlight = useRef(false);
+
+  const run: RunAction = (fn) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setError(null);
+    startTransition(async () => {
+      try {
+        await fn();
+        router.refresh();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "That change could not be saved.");
+      } finally {
+        inFlight.current = false;
+      }
+    });
+  };
+
+  function handleSelect(patternId: string) {
     if (!pickingColumn) return;
     const col = pickingColumn;
     setPickingColumn(null);
     setPreviewId(null);
-    await addBlock(groupId, col, patternId);
+    run(() => addBlock(groupId, col, patternId));
   }
 
   function handleCancel() {
@@ -208,6 +242,22 @@ export function LayoutBuilder({
           }
         }}
       >
+        {error && (
+          <div
+            role="alert"
+            className="mb-4 border border-maroon/30 bg-maroon/5 px-4 py-2 flex items-start gap-3"
+          >
+            <p className="font-headline text-[12px] tracking-wide text-maroon flex-1">{error}</p>
+            <button
+              type="button"
+              onClick={() => setError(null)}
+              className="cursor-pointer font-headline text-[12px] text-maroon/60 hover:text-maroon transition-colors"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
         <div className="flex flex-col lg:flex-row">
           {/* Main column */}
           <div className="lg:flex-[2] lg:border-r lg:border-neutral-200 lg:pr-8">
@@ -217,11 +267,14 @@ export function LayoutBuilder({
                 onHover={setPreviewId}
                 onSelect={handleSelect}
                 onCancel={handleCancel}
+                busy={busy}
                 roundTable={roundTable}
               />
             ) : (
               <ColumnView
                 groupId={groupId}
+                run={run}
+                busy={busy}
                 column="main"
                 blocks={mainBlocks}
                 roundTable={roundTable}
@@ -240,11 +293,14 @@ export function LayoutBuilder({
                 onHover={setPreviewId}
                 onSelect={handleSelect}
                 onCancel={handleCancel}
+                busy={busy}
                 roundTable={roundTable}
               />
             ) : (
               <ColumnView
                 groupId={groupId}
+                run={run}
+                busy={busy}
                 column="sidebar"
                 blocks={sidebarBlocks}
                 roundTable={roundTable}
@@ -267,11 +323,14 @@ export function LayoutBuilder({
               onHover={setPreviewId}
               onSelect={handleSelect}
               onCancel={handleCancel}
+              busy={busy}
               roundTable={roundTable}
             />
           ) : (
             <ColumnView
               groupId={groupId}
+              run={run}
+              busy={busy}
               column="full"
               blocks={fullBlocks}
               roundTable={roundTable}
@@ -313,6 +372,8 @@ export function LayoutBuilder({
 
 function ColumnView({
   groupId,
+  run,
+  busy,
   column,
   blocks,
   roundTable,
@@ -321,6 +382,8 @@ function ColumnView({
   previewId,
 }: {
   groupId: string;
+  run: RunAction;
+  busy: boolean;
   column: "main" | "sidebar" | "full";
   blocks: BlockWithSlots[];
   roundTable: RoundTableSummary | null;
@@ -337,7 +400,8 @@ function ColumnView({
           <button
             type="button"
             onClick={onStartPick}
-            className="cursor-pointer border border-dashed border-neutral-300 px-10 py-8 hover:border-maroon hover:bg-maroon/5 transition-colors"
+            disabled={busy}
+            className="cursor-pointer border border-dashed border-neutral-300 px-10 py-8 hover:border-maroon hover:bg-maroon/5 transition-colors disabled:opacity-40 disabled:cursor-wait"
           >
             <span className="block text-neutral-400 text-[24px] text-center">+</span>
             <span className="block font-headline text-[13px] text-neutral-400 mt-1">
@@ -352,6 +416,8 @@ function ColumnView({
           <BlockView
             block={block}
             groupId={groupId}
+            run={run}
+            busy={busy}
             column={column}
             allBlocks={blocks}
             index={i}
@@ -403,9 +469,10 @@ function ColumnView({
           <button
             type="button"
             onClick={onStartPick}
-            className="cursor-pointer w-full border border-dashed border-neutral-300 py-3 text-center hover:border-maroon hover:bg-maroon/5 transition-colors font-headline text-[13px] tracking-wide text-neutral-400"
+            disabled={busy}
+            className="cursor-pointer w-full border border-dashed border-neutral-300 py-3 text-center hover:border-maroon hover:bg-maroon/5 transition-colors font-headline text-[13px] tracking-wide text-neutral-400 disabled:opacity-40 disabled:cursor-wait"
           >
-            + Add Block
+            {busy ? "Saving…" : "+ Add Block"}
           </button>
         </div>
       )}
@@ -422,12 +489,14 @@ function PatternList({
   onHover,
   onSelect,
   onCancel,
+  busy,
   roundTable: _roundTable,
 }: {
   column: "main" | "sidebar" | "full";
   onHover: (id: string | null) => void;
   onSelect: (id: string) => void;
   onCancel: () => void;
+  busy: boolean;
   roundTable: RoundTableSummary | null;
 }) {
   const patterns =
@@ -479,7 +548,8 @@ function PatternList({
             // different. handleSelect / handleCancel still reset previewId.
             onMouseEnter={() => onHover(p.id)}
             onClick={() => onSelect(p.id)}
-            className="cursor-pointer w-full text-left px-4 py-3 border border-neutral-100 hover:border-maroon hover:bg-maroon/5 transition-colors"
+            disabled={busy}
+            className="cursor-pointer w-full text-left px-4 py-3 border border-neutral-100 hover:border-maroon hover:bg-maroon/5 transition-colors disabled:opacity-40 disabled:cursor-wait"
           >
             <span className="block font-headline text-[14px] font-semibold">{p.name}</span>
             <span className="block font-headline text-[12px] text-caption mt-0.5">
@@ -499,6 +569,8 @@ function PatternList({
 function BlockView({
   block,
   groupId,
+  run,
+  busy,
   column,
   allBlocks,
   index,
@@ -506,6 +578,8 @@ function BlockView({
 }: {
   block: BlockWithSlots;
   groupId: string;
+  run: RunAction;
+  busy: boolean;
   column: "main" | "sidebar" | "full";
   allBlocks: BlockWithSlots[];
   index: number;
@@ -515,11 +589,14 @@ function BlockView({
   const isFirst = index === 0;
   const isLast = index === allBlocks.length - 1;
 
+  // `allBlocks` is a render-time snapshot, so a second click before the first
+  // reorder lands would send an order derived from stale ids. `run` is a no-op
+  // while a mutation is in flight and refreshes the route when it finishes.
   function swap(dir: -1 | 1) {
     const ids = allBlocks.map((b) => b.id);
     const j = index + dir;
     [ids[index], ids[j]] = [ids[j], ids[index]];
-    reorderBlocks(groupId, column, ids);
+    run(() => reorderBlocks(groupId, column, ids));
   }
 
   return (
@@ -534,7 +611,8 @@ function BlockView({
             <button
               type="button"
               onClick={() => swap(-1)}
-              className="cursor-pointer font-headline text-[11px] text-caption/60 hover:text-maroon transition-colors px-0.5"
+              disabled={busy}
+              className="cursor-pointer font-headline text-[11px] text-caption/60 hover:text-maroon transition-colors px-0.5 disabled:opacity-40 disabled:cursor-wait"
               title="Move up"
             >
               &uarr;
@@ -544,7 +622,8 @@ function BlockView({
             <button
               type="button"
               onClick={() => swap(1)}
-              className="cursor-pointer font-headline text-[11px] text-caption/60 hover:text-maroon transition-colors px-0.5"
+              disabled={busy}
+              className="cursor-pointer font-headline text-[11px] text-caption/60 hover:text-maroon transition-colors px-0.5 disabled:opacity-40 disabled:cursor-wait"
               title="Move down"
             >
               &darr;
@@ -557,8 +636,9 @@ function BlockView({
                 <button
                   key={style}
                   type="button"
-                  onClick={() => updateDividerStyle(block.id, style, groupId)}
-                  className={`cursor-pointer font-headline text-[10px] px-2 py-0.5 transition-colors ${
+                  onClick={() => run(() => updateDividerStyle(block.id, style, groupId))}
+                  disabled={busy}
+                  className={`cursor-pointer font-headline text-[10px] px-2 py-0.5 transition-colors disabled:opacity-40 disabled:cursor-wait ${
                     block.dividerStyle === style
                       ? "bg-ink text-white"
                       : "border border-ink/15 text-caption hover:border-ink"
@@ -572,8 +652,9 @@ function BlockView({
           )}
           <button
             type="button"
-            onClick={() => deleteBlock(block.id, groupId)}
-            className="cursor-pointer font-headline text-[11px] text-caption/40 hover:text-maroon transition-colors"
+            onClick={() => run(() => deleteBlock(block.id, groupId))}
+            disabled={busy}
+            className="cursor-pointer font-headline text-[11px] text-caption/40 hover:text-maroon transition-colors disabled:opacity-40 disabled:cursor-wait"
           >
             Delete
           </button>
