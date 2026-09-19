@@ -4,8 +4,7 @@ import { uploadRequestSchema, deleteImageSchema, uploaderIdFromKey } from "@/lib
 import { createPresignedUploadUrl, deleteS3Object } from "@/lib/s3";
 import { errorResponse } from "@/lib/errors";
 import { randomUUID } from "crypto";
-
-const EDITOR_ROLES = ["EDITOR", "CHIEF_EDITOR", "WEB_TEAM", "WEB_MASTER"] as const;
+import { isEditorRole } from "@/lib/roles";
 
 export async function POST(req: NextRequest) {
   const { session, error } = await checkRole("WRITER");
@@ -49,7 +48,7 @@ export async function DELETE(req: NextRequest) {
 
   // Ownership-or-editor gate. New-format keys carry the uploader id; legacy-format keys (no uploader)
   // require editor+ since we can't tell who put them there.
-  const isEditorPlus = (EDITOR_ROLES as readonly string[]).includes(session.user.role);
+  const isEditorPlus = isEditorRole(session.user.role);
   const uploaderId = uploaderIdFromKey(parsed.data.key);
   const isOwner = uploaderId !== null && uploaderId === session.user.id;
   if (!isEditorPlus && !isOwner) {

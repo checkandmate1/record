@@ -5,21 +5,19 @@ import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { invalidateHomepage } from "@/lib/page-cache";
+import { isDashboardRole, isEditorRole } from "@/lib/roles";
 import { PATTERNS } from "@/lib/patterns";
 import { deleteS3Object, getS3ObjectHead } from "@/lib/s3";
 import { parseIssuePdfKey } from "@/lib/validations";
 
-const DASHBOARD_ROLES = ["WRITER", "DESIGNER", "PHOTOGRAPHER", "ART_TEAM", "EDITOR", "CHIEF_EDITOR", "WEB_TEAM", "WEB_MASTER"];
-const EDITOR_ROLES = ["EDITOR", "CHIEF_EDITOR", "WEB_TEAM", "WEB_MASTER"];
-
 function requireDashboardRole(session: { user?: { role?: string } } | null) {
-  if (!session?.user?.role || !DASHBOARD_ROLES.includes(session.user.role)) {
+  if (!isDashboardRole(session?.user?.role)) {
     throw new Error("Dashboard access required");
   }
 }
 
 function requireEditor(session: { user?: { role?: string } } | null) {
-  if (!session?.user?.role || !EDITOR_ROLES.includes(session.user.role)) {
+  if (!isEditorRole(session?.user?.role)) {
     throw new Error("Editor access required");
   }
 }
@@ -251,7 +249,7 @@ export async function removeGroupApproval(approvalId: string, groupId: string) {
   const approval = await prisma.approval.findUnique({ where: { id: approvalId } });
   if (!approval) throw new Error("Approval not found");
 
-  if (approval.userId !== session.user.id && !EDITOR_ROLES.includes(session.user.role ?? "")) {
+  if (approval.userId !== session.user.id && !isEditorRole(session.user.role)) {
     throw new Error("You can only remove your own approval");
   }
 

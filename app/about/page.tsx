@@ -2,17 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { SubpageHeader } from "@/app/subpage-header";
 import { Footer } from "@/app/footer";
 import Link from "next/link";
-
-const ROLE_LABELS: Record<string, string> = {
-  WRITER: "Staff Writer",
-  DESIGNER: "Designer",
-  PHOTOGRAPHER: "Photographer",
-  ART_TEAM: "Art Team",
-  EDITOR: "Editor",
-  CHIEF_EDITOR: "Chief Editor",
-  WEB_TEAM: "Web Team",
-  WEB_MASTER: "Web Master",
-};
+import { roleLabel } from "@/lib/roles";
 
 type RowDef = {
   title: string;
@@ -125,7 +115,7 @@ export default async function AboutPage() {
 }
 
 function StaffCard({ user }: { user: StaffUser }) {
-  const title = user.displayTitle ?? ROLE_LABELS[user.role] ?? user.role;
+  const title = user.displayTitle ?? roleLabel(user.role);
   const avatar = user.image ?? user.googleImage;
   return (
     <li className="flex flex-col items-center text-center w-[140px]">

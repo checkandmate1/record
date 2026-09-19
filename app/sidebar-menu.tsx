@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { isDashboardRole } from "@/lib/roles";
 
 const SECTIONS = [
   { label: "News", href: "/section/news" },
@@ -10,17 +11,6 @@ const SECTIONS = [
   { label: "A&E", href: "/section/a-and-e" },
   { label: "Lion\u2019s Den", href: "/section/lions-den" },
   { label: "MD/Alumni", href: "/section/md-alumni" },
-];
-
-const DASHBOARD_ROLES = [
-  "WRITER",
-  "DESIGNER",
-  "PHOTOGRAPHER",
-  "ART_TEAM",
-  "EDITOR",
-  "CHIEF_EDITOR",
-  "WEB_TEAM",
-  "WEB_MASTER",
 ];
 
 export function HamburgerButton({
@@ -34,7 +24,7 @@ export function HamburgerButton({
 
   const pages: { label: string; href: string }[] = [{ label: "Home", href: "/" }];
   if (isAuthenticated) {
-    if (userRole && DASHBOARD_ROLES.includes(userRole)) {
+    if (isDashboardRole(userRole)) {
       pages.push({ label: "Dashboard", href: "/dashboard" });
     }
     pages.push({ label: "Account", href: "/account" });

@@ -3,24 +3,12 @@ import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { formatDateShort } from "@/lib/article-helpers";
+import { ALL_ROLES, roleLabel } from "@/lib/roles";
 import {
   updateUserRole,
   updateUserDisplayTitle,
   updateUserPriority,
 } from "@/app/admin/admin-actions";
-
-const ROLE_LABELS: Record<string, string> = {
-  READER: "Reader",
-  WRITER: "Staff Writer",
-  DESIGNER: "Designer",
-  PHOTOGRAPHER: "Photographer",
-  ART_TEAM: "Art Team",
-  EDITOR: "Editor",
-  CHIEF_EDITOR: "Chief Editor",
-  WEB_TEAM: "Web Team",
-  WEB_MASTER: "Web Master",
-};
-const ROLES = ["READER", "WRITER", "DESIGNER", "PHOTOGRAPHER", "ART_TEAM", "EDITOR", "CHIEF_EDITOR", "WEB_TEAM", "WEB_MASTER"] as const;
 
 export default async function EditUserPage({
   params,
@@ -90,7 +78,7 @@ export default async function EditUserPage({
           </h1>
           <p className="font-headline text-[14px] text-caption mt-1">{user.email}</p>
           <p className="font-headline text-[12px] tracking-[0.08em] uppercase text-caption mt-2">
-            {ROLE_LABELS[user.role] ?? user.role}
+            {roleLabel(user.role)}
             {user.displayTitle && <> &middot; {user.displayTitle}</>}
           </p>
           <p className="font-headline text-[12px] text-caption mt-1">
@@ -134,9 +122,9 @@ export default async function EditUserPage({
             disabled={isSelf}
             className="border border-ink/20 px-3 py-2 font-body text-[14px] outline-none focus:border-ink disabled:bg-neutral-100 disabled:text-caption"
           >
-            {ROLES.map((r) => (
+            {ALL_ROLES.map((r) => (
               <option key={r} value={r}>
-                {ROLE_LABELS[r]}
+                {roleLabel(r)}
               </option>
             ))}
           </select>
@@ -164,7 +152,7 @@ export default async function EditUserPage({
           <input
             name="displayTitle"
             defaultValue={user.displayTitle ?? ""}
-            placeholder={ROLE_LABELS[user.role] ?? user.role}
+            placeholder={roleLabel(user.role)}
             maxLength={80}
             className="border border-ink/20 px-3 py-2 font-body text-[14px] outline-none focus:border-ink w-full sm:w-[320px]"
           />

@@ -5,8 +5,7 @@ import { userMinimalNameSelect, userMinimalNameImageSelect, userPublicSelect, ar
 import { Footer } from "@/app/footer";
 import { LayoutEditorWrapper } from "@/app/dashboard/layout-editor-wrapper";
 import { formatIssueTitle } from "@/lib/article-helpers";
-
-const DASHBOARD_ROLES = ["WRITER", "DESIGNER", "EDITOR", "WEB_TEAM", "WEB_MASTER"];
+import { DASHBOARD_ROLES, isDashboardRole } from "@/lib/roles";
 
 const NAV_SECTIONS = [
   { label: "News" },
@@ -31,7 +30,7 @@ export default async function LayoutEditorPage({
   params: Promise<{ id: string }>;
 }) {
   const session = await auth();
-  if (!session?.user || !DASHBOARD_ROLES.includes(session.user.role ?? "")) redirect("/dashboard");
+  if (!session?.user || !isDashboardRole(session.user.role)) redirect("/dashboard");
 
   const { id } = await params;
 
@@ -63,7 +62,7 @@ export default async function LayoutEditorPage({
       },
     }),
     prisma.user.findMany({
-      where: { role: { in: ["WRITER", "DESIGNER", "EDITOR", "WEB_TEAM", "WEB_MASTER"] } },
+      where: { role: { in: [...DASHBOARD_ROLES] } },
       select: userMinimalNameSelect,
       orderBy: { name: "asc" },
     }),

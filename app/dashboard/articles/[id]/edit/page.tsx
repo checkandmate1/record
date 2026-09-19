@@ -12,6 +12,7 @@ import {
 import { ApprovalDisplay } from "@/app/dashboard/approval-display";
 import { approveArticle, removeArticleApproval } from "@/app/dashboard/article-actions";
 import { joinAuthorNames } from "@/lib/article-helpers";
+import { isEditorRole, roleLabel } from "@/lib/roles";
 
 function formatDate(date: Date): string {
   return date.toLocaleDateString("en-US", {
@@ -60,7 +61,7 @@ export default async function EditArticlePage({
     image: a.user.image,
   }));
   const hasApproved = approvers.some((a: any) => a.id === session.user.id);
-  const canManage = ["EDITOR", "WEB_TEAM", "WEB_MASTER"].includes(session.user.role ?? "");
+  const canManage = isEditorRole(session.user.role);
 
   const existingCredits = article.credits.map((c: (typeof article.credits)[number]) => ({
     userId: c.user.id,
@@ -75,7 +76,7 @@ export default async function EditArticlePage({
   const usersWithDefaults = allUsers.map((u: (typeof allUsers)[number]) => ({
     id: u.id,
     name: u.name ?? "",
-    defaultRole: (u as { displayTitle?: string | null }).displayTitle ?? defaultRoleDisplay(u.role),
+    defaultRole: (u as { displayTitle?: string | null }).displayTitle ?? roleLabel(u.role),
   }));
 
   return (
@@ -153,16 +154,4 @@ export default async function EditArticlePage({
       </div>
     </div>
   );
-}
-
-function defaultRoleDisplay(role: string): string {
-  const map: Record<string, string> = {
-    READER: "Reader",
-    WRITER: "Staff Writer",
-    DESIGNER: "Designer",
-    EDITOR: "Editor",
-    WEB_TEAM: "Web Team",
-    WEB_MASTER: "Web Master",
-  };
-  return map[role] ?? role;
 }

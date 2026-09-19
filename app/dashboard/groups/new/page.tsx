@@ -3,11 +3,11 @@ import { redirect } from "next/navigation";
 import { SubpageHeader } from "@/app/subpage-header";
 import { createGroupWithArticles } from "@/app/dashboard/group-actions";
 import { getSiteVolumeAndIssue } from "@/lib/site-volume";
+import { isEditorRole } from "@/lib/roles";
 
 export default async function NewGroupPage() {
   const session = await auth();
-  const EDITOR_ROLES = ["EDITOR", "CHIEF_EDITOR", "WEB_TEAM", "WEB_MASTER"];
-  if (!session?.user || !EDITOR_ROLES.includes(session.user.role ?? "")) redirect("/dashboard");
+  if (!session?.user || !isEditorRole(session.user.role)) redirect("/dashboard");
 
   const { volumeNumber: currentVolume } = await getSiteVolumeAndIssue();
   const defaultVolume = currentVolume != null ? String(currentVolume) : "";

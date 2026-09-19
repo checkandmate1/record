@@ -7,6 +7,7 @@ import { generateUniqueSlug } from "@/lib/slugify";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { invalidateHomepage } from "@/lib/page-cache";
+import { isDashboardRole, isEditorRole } from "@/lib/roles";
 
 function parseCredits(formData: FormData) {
   const count = parseInt(formData.get("credit_count") as string, 10) || 0;
@@ -21,17 +22,14 @@ function parseCredits(formData: FormData) {
   return credits;
 }
 
-const DASHBOARD_ROLES = ["WRITER", "DESIGNER", "PHOTOGRAPHER", "ART_TEAM", "EDITOR", "CHIEF_EDITOR", "WEB_TEAM", "WEB_MASTER"];
-const EDITOR_ROLES = ["EDITOR", "CHIEF_EDITOR", "WEB_TEAM", "WEB_MASTER"];
-
 function requireDashboardRole(session: { user?: { role?: string } } | null) {
-  if (!session?.user?.role || !DASHBOARD_ROLES.includes(session.user.role)) {
+  if (!isDashboardRole(session?.user?.role)) {
     throw new Error("Dashboard access required");
   }
 }
 
 function requireEditor(session: { user?: { role?: string } } | null) {
-  if (!session?.user?.role || !EDITOR_ROLES.includes(session.user.role)) {
+  if (!isEditorRole(session?.user?.role)) {
     throw new Error("Editor access required");
   }
 }
@@ -123,7 +121,7 @@ export async function deleteArticle(id: string) {
 
   // Writers may delete their own articles; only EDITOR+ may delete others'.
   const isOwner = existing.createdById === session!.user!.id;
-  const isEditorPlus = !!session?.user?.role && EDITOR_ROLES.includes(session.user.role);
+  const isEditorPlus = isEditorRole(session?.user?.role);
   if (!isOwner && !isEditorPlus) {
     throw new Error("You can only delete your own articles");
   }
@@ -155,7 +153,7 @@ export async function removeArticleApproval(approvalId: string, articleId: strin
   if (!approval) throw new Error("Approval not found");
 
   // Users can remove their own approval; EDITOR+ can remove anyone's
-  if (approval.userId !== session.user.id && !EDITOR_ROLES.includes(session.user.role ?? "")) {
+  if (approval.userId !== session.user.id && !isEditorRole(session.user.role)) {
     throw new Error("You can only remove your own approval");
   }
 

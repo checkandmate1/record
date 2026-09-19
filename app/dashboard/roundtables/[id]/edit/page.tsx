@@ -7,8 +7,7 @@ import { SubpageHeader } from "@/app/subpage-header";
 import { RoundTableForm } from "@/app/dashboard/roundtable-form";
 import { SavedToast } from "@/app/dashboard/saved-toast";
 import { updateRoundTable, deleteRoundTable } from "@/app/dashboard/roundtable-actions";
-
-const EDITOR_ROLES = ["EDITOR", "WEB_TEAM", "WEB_MASTER"];
+import { isEditorRole } from "@/lib/roles";
 
 export default async function EditRoundTablePage({
   params,
@@ -59,7 +58,7 @@ export default async function EditRoundTablePage({
     orderBy: { name: "asc" },
   });
 
-  const canDelete = EDITOR_ROLES.includes(session.user.role ?? "");
+  const canDelete = isEditorRole(session.user.role);
 
   const updateAction = async (formData: FormData) => {
     "use server";

@@ -16,6 +16,7 @@ import { ApprovalDisplay } from "@/app/dashboard/approval-display";
 import { IssuePdfSection } from "@/app/dashboard/issue-pdf-section";
 import { joinAuthorNames, formatIssueTitle } from "@/lib/article-helpers";
 import { getSiteVolumeAndIssue } from "@/lib/site-volume";
+import { isDashboardRole, isEditorRole } from "@/lib/roles";
 
 const SECTION_LABELS: Record<string, string> = {
   NEWS: "News", FEATURES: "Features", OPINIONS: "Opinions",
@@ -31,8 +32,7 @@ export default async function GroupEditorPage({
   searchParams: Promise<{ saved?: string }>;
 }) {
   const session = await auth();
-  const DASHBOARD_ROLES = ["WRITER", "DESIGNER", "EDITOR", "WEB_TEAM", "WEB_MASTER"];
-  if (!session?.user || !DASHBOARD_ROLES.includes(session.user.role ?? "")) redirect("/dashboard");
+  if (!session?.user || !isDashboardRole(session.user.role)) redirect("/dashboard");
 
   const { id } = await params;
   const { saved } = await searchParams;
@@ -96,8 +96,8 @@ export default async function GroupEditorPage({
     image: a.user.image,
   }));
   const hasApproved = approvers.some((a: any) => a.id === session.user.id);
-  const canManage = ["EDITOR", "WEB_TEAM", "WEB_MASTER"].includes(session.user.role ?? "");
-  const canPublish = ["EDITOR", "WEB_TEAM", "WEB_MASTER"].includes(session.user.role ?? "");
+  const canManage = isEditorRole(session.user.role);
+  const canPublish = isEditorRole(session.user.role);
 
   // Split blocks by column
   const mainBlocks = group.blocks.filter((b: any) => b.column === "main");

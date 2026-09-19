@@ -1,25 +1,12 @@
 import { auth } from "@/lib/auth";
 import { errorResponse } from "@/lib/errors";
 import { Role } from "@prisma/client";
+import { ROLE_LEVEL } from "@/lib/roles";
 import { Session } from "next-auth";
 
 type AuthResult =
   | { session: Session; error: undefined }
   | { session: null; error: Response };
-
-// Strictly increasing levels so checkRole(role) actually rejects roles below it.
-// Prior table had READER..CHIEF_EDITOR all at 0, so checkRole("EDITOR") admitted any signed-in user.
-const ROLE_LEVEL: Record<Role, number> = {
-  READER: 0,
-  WRITER: 1,
-  DESIGNER: 1,
-  PHOTOGRAPHER: 1,
-  ART_TEAM: 1,
-  EDITOR: 2,
-  CHIEF_EDITOR: 3,
-  WEB_TEAM: 4,
-  WEB_MASTER: 5,
-};
 
 export async function checkRole(requiredRole: Role): Promise<AuthResult> {
   const session = await auth();

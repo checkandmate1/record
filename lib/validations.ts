@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ALL_ROLES } from "@/lib/roles";
 
 // `z.string().url()` accepts `javascript:` and `data:` URLs which are dangerous in href/src contexts.
 // Restrict to http(s) by default; opt-in to `data:image/*` for fields like Article.featuredImage that
@@ -112,7 +113,7 @@ export function parseIssuePdfKey(key: string): { groupId: string } | null {
 }
 
 export const updateRoleSchema = z.object({
-  role: z.enum(["READER", "WRITER", "DESIGNER", "EDITOR", "WEB_TEAM", "WEB_MASTER"]),
+  role: z.enum(ALL_ROLES),
 });
 
 export const updateAdminSchema = z.object({

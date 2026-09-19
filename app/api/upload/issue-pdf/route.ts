@@ -5,15 +5,14 @@ import { issuePdfUploadRequestSchema } from "@/lib/validations";
 import { createPresignedUploadUrl } from "@/lib/s3";
 import { errorResponse } from "@/lib/errors";
 import { randomUUID } from "crypto";
-
-const EDITOR_ROLES = ["EDITOR", "CHIEF_EDITOR", "WEB_TEAM", "WEB_MASTER"];
+import { isEditorRole } from "@/lib/roles";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user) {
     return errorResponse("UNAUTHORIZED", "Sign in required", 401);
   }
-  if (!EDITOR_ROLES.includes(session.user.role)) {
+  if (!isEditorRole(session.user.role)) {
     return errorResponse("FORBIDDEN", "Editor access required", 403);
   }
 

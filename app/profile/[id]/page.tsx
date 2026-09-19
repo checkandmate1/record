@@ -11,15 +11,7 @@ import {
   formatDateShort,
   getPreviewText,
 } from "@/lib/article-helpers";
-
-const ROLE_DISPLAY: Record<string, string> = {
-  READER: "Reader",
-  WRITER: "Staff Writer",
-  DESIGNER: "Designer",
-  EDITOR: "Editor",
-  WEB_TEAM: "Web Team",
-  WEB_MASTER: "Web Master",
-};
+import { roleLabel as roleDisplayName } from "@/lib/roles";
 
 interface UserData {
   id: string;
@@ -66,7 +58,7 @@ async function loadUser(id: string): Promise<UserData | null> {
 }
 
 function roleLabel(user: UserData): string | null {
-  const label = user.displayTitle ?? ROLE_DISPLAY[user.role] ?? user.role;
+  const label = user.displayTitle ?? roleDisplayName(user.role);
   return label === "Reader" ? null : label;
 }
 

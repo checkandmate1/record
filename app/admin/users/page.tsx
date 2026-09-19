@@ -1,20 +1,9 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { formatDateShort } from "@/lib/article-helpers";
+import { ALL_ROLES, roleLabel } from "@/lib/roles";
 
-const ROLE_LABELS: Record<string, string> = {
-  READER: "Reader",
-  WRITER: "Staff Writer",
-  DESIGNER: "Designer",
-  PHOTOGRAPHER: "Photographer",
-  ART_TEAM: "Art Team",
-  EDITOR: "Editor",
-  CHIEF_EDITOR: "Chief Editor",
-  WEB_TEAM: "Web Team",
-  WEB_MASTER: "Web Master",
-};
-
-const ROLE_FILTERS = ["ALL", "READER", "WRITER", "DESIGNER", "PHOTOGRAPHER", "ART_TEAM", "EDITOR", "CHIEF_EDITOR", "WEB_TEAM", "WEB_MASTER"] as const;
+const ROLE_FILTERS = ["ALL", ...ALL_ROLES] as const;
 type RoleFilter = (typeof ROLE_FILTERS)[number];
 
 const PER_PAGE = 25;
@@ -98,7 +87,7 @@ export default async function UsersListPage({
         >
           {ROLE_FILTERS.map((r) => (
             <option key={r} value={r}>
-              {r === "ALL" ? "All roles" : ROLE_LABELS[r]}
+              {r === "ALL" ? "All roles" : roleLabel(r)}
             </option>
           ))}
         </select>
@@ -154,7 +143,7 @@ export default async function UsersListPage({
                     <p className="font-headline text-[12px] text-caption truncate">{u.email}</p>
                   </div>
                   <span className="font-headline text-[12px] tracking-[0.08em] uppercase text-caption">
-                    {ROLE_LABELS[u.role] ?? u.role}
+                    {roleLabel(u.role)}
                   </span>
                   <span className="hidden sm:block font-headline text-[12px] text-caption">
                     {formatDateShort(u.createdAt)}

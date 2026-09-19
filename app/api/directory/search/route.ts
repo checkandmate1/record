@@ -3,15 +3,15 @@ import { auth } from "@/lib/auth";
 import { errorResponse } from "@/lib/errors";
 import { directorySearchSchema } from "@/lib/validations";
 import { isDirectoryConfigured, searchDirectory } from "@/lib/google-directory";
+import { isAdminRole } from "@/lib/roles";
 
 // Directory search is a WEB_TEAM+ (admin-panel) capability — it's only used by the admin
 // "Authors" page, where placeholder authors are created.
-const ADMIN_ROLES = ["WEB_TEAM", "WEB_MASTER"];
 
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return errorResponse("UNAUTHORIZED", "Sign in required", 401);
-  if (!ADMIN_ROLES.includes(session.user.role)) {
+  if (!isAdminRole(session.user.role)) {
     return errorResponse("FORBIDDEN", "Web team access required", 403);
   }
 

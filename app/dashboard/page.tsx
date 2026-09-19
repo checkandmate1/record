@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { SubpageHeader } from "@/app/subpage-header";
 import { SavedToast } from "@/app/dashboard/saved-toast";
 import { formatIssueTitle } from "@/lib/article-helpers";
+import { isEditorRole } from "@/lib/roles";
 
 const STATUS_LABELS: Record<string, string> = {
   DRAFT: "Draft",
@@ -42,7 +43,7 @@ export default async function DashboardPage({
     },
   });
 
-  const canManage = ["EDITOR", "WEB_TEAM", "WEB_MASTER"].includes(session.user.role ?? "");
+  const canManage = isEditorRole(session.user.role);
 
   return (
     <div className="min-h-screen flex flex-col bg-white font-body page-enter">
