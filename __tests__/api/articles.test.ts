@@ -51,6 +51,10 @@ const mockArticle = {
   images: [],
 };
 
+const BUCKET = "record-test-bucket";
+const REGION = "us-east-2";
+const S3_IMAGE_URL = `https://${BUCKET}.s3.${REGION}.amazonaws.com/uploads/user-1/abc.jpg`;
+
 function makeRequest(url: string): NextRequest {
   return new NextRequest(url);
 }
@@ -136,7 +140,12 @@ describe("GET /api/articles", () => {
 });
 
 describe("POST /api/articles", () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    // isS3Url (via createArticleSchema.featuredImage) reads these at call time.
+    process.env.AWS_S3_BUCKET = BUCKET;
+    process.env.AWS_REGION = REGION;
+  });
 
   it("returns 401 when not authenticated", async () => {
     mockCheckRole.mockResolvedValue({
@@ -221,6 +230,68 @@ describe("POST /api/articles", () => {
     const req = makePostRequest({ title: "", section: "NEWS" });
     const res = await POST(req);
     expect(res.status).toBe(400);
+  });
+
+  it("returns 400 for a base64 data URL featured image", async () => {
+    mockCheckRole.mockResolvedValue({
+      session: { user: { id: "user-1", role: "EDITOR", isAdmin: false } },
+      error: undefined,
+    });
+
+    const req = makePostRequest({
+      title: "Test Article",
+      body: "<p>Content</p>",
+      section: "NEWS",
+      groupId: "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+      featuredImage: "data:image/png;base64,AAAA",
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for an https featured image outside the upload bucket", async () => {
+    mockCheckRole.mockResolvedValue({
+      session: { user: { id: "user-1", role: "EDITOR", isAdmin: false } },
+      error: undefined,
+    });
+
+    const req = makePostRequest({
+      title: "Test Article",
+      body: "<p>Content</p>",
+      section: "NEWS",
+      groupId: "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+      featuredImage: "https://evil.example.com/pic.jpg",
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it("accepts a featured image in the site's S3 bucket", async () => {
+    mockCheckRole.mockResolvedValue({
+      session: { user: { id: "user-1", role: "EDITOR", isAdmin: false } },
+      error: undefined,
+    });
+    mockGenerateUniqueSlug.mockResolvedValue("test-article");
+    mockSanitizeHtml.mockReturnValue("<p>Content</p>");
+    mockCreate.mockResolvedValue(mockArticle);
+
+    const req = makePostRequest({
+      title: "Test Article",
+      body: "<p>Content</p>",
+      section: "NEWS",
+      groupId: "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+      featuredImage: S3_IMAGE_URL,
+    });
+    const res = await POST(req);
+
+    expect(res.status).toBe(201);
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ featuredImage: S3_IMAGE_URL }),
+      })
+    );
   });
 
   it("sanitizes html body before saving", async () => {
