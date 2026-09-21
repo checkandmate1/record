@@ -21,18 +21,31 @@ export const dynamic = "force-dynamic";
 
 const BEARER = "Bearer ";
 
-function isAuthorized(req: NextRequest, secret: string): boolean {
+/** The presented token, or null when there is no usable `Authorization: Bearer …` header. */
+function presentedToken(req: NextRequest): string | null {
   const header = req.headers.get("authorization");
-  if (!header || !header.startsWith(BEARER)) return false;
-  const provided = Buffer.from(header.slice(BEARER.length));
-  const expected = Buffer.from(secret);
+  if (!header || !header.startsWith(BEARER)) return null;
+  const token = header.slice(BEARER.length);
+  return token.length > 0 ? token : null;
+}
+
+function matches(provided: string, secret: string): boolean {
+  const a = Buffer.from(provided);
+  const b = Buffer.from(secret);
   // timingSafeEqual throws on a length mismatch, and the length of a secret is not itself
   // sensitive, so compare lengths first.
-  if (provided.length !== expected.length) return false;
-  return timingSafeEqual(provided, expected);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
 }
 
 export async function POST(req: NextRequest) {
+  // Credential check FIRST. If it ran after the `!secret` branch, an unauthenticated prober
+  // could tell a configured box (401) from an unconfigured one (500) without any credential.
+  const provided = presentedToken(req);
+  if (provided === null) {
+    return errorResponse("UNAUTHORIZED", "Invalid cron credentials", 401);
+  }
+
   const secret = process.env.CRON_SECRET;
   if (!secret) {
     console.error(
@@ -46,7 +59,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (!isAuthorized(req, secret)) {
+  if (!matches(provided, secret)) {
     return errorResponse("UNAUTHORIZED", "Invalid cron credentials", 401);
   }
 

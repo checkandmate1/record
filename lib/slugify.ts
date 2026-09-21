@@ -80,16 +80,17 @@ export async function generateUniqueRoundTableSlug(
 const RANDOM_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 
 /**
- * Replace (not stack) a trailing 4-character random suffix. Used when an insert lost the race
- * for a slug that was free when we checked.
+ * Append a 4-character random suffix. Used when an insert lost the race for a slug that was free
+ * when we checked. It appends rather than replacing a trailing 4-char segment, because that
+ * segment is usually a real word: `hello-world-news` must become `hello-world-news-ab12`, not
+ * `hello-world-ab12` (a different article's slug).
  */
 export function withRandomSuffix(slug: string): string {
-  const stripped = slug.replace(/-[a-z0-9]{4}$/, "");
   let suffix = "";
   for (let i = 0; i < 4; i++) {
     suffix += RANDOM_ALPHABET[Math.floor(Math.random() * RANDOM_ALPHABET.length)];
   }
-  return `${stripped}-${suffix}`;
+  return `${slug}-${suffix}`;
 }
 
 /** True for a Prisma unique-constraint violation (P2002) on a `slug` column. */

@@ -204,4 +204,25 @@ describe("proxy auth exemptions", () => {
     const res = await loadProxy()(request("/admin/users", { role: "EDITOR" }));
     expect(res.headers.get("location")).toBe("http://localhost:3000/");
   });
+
+  // The cron job has no session — it carries `Authorization: Bearer $CRON_SECRET` and the route
+  // checks that itself. If a future change to the auth gate starts 401ing this path, scheduled
+  // publishing silently stops firing and nothing else fails, so pin it here.
+  it("lets an anonymous POST /api/cron/publish-scheduled through to the route", async () => {
+    const res = await loadProxy()(
+      apiRequest("/api/cron/publish-scheduled", { method: "POST", ip: "10.1.1.1" }, null),
+    );
+    expect(res.status).not.toBe(401);
+    expect(res.status).not.toBe(403);
+    expect(res.headers.get("location")).toBeNull();
+    // Still security-headed like every other response.
+    expect(res.headers.get("Content-Security-Policy")).toBeTruthy();
+  });
+
+  it("still 401s an anonymous POST to a non-cron API route", async () => {
+    const res = await loadProxy()(
+      apiRequest("/api/articles", { method: "POST", ip: "10.1.1.2" }, null),
+    );
+    expect(res.status).toBe(401);
+  });
 });

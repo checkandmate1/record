@@ -28,13 +28,20 @@ export async function publishGroupById(id: string): Promise<void> {
     throw new Error("Set a volume number and issue number before publishing this issue.");
   }
 
+  // Guarded on `status: "DRAFT"` so this is a compare-and-set, not a blind write: an editor
+  // hitting Publish while a cron tick is in flight (or a slow tick overrunning the next one)
+  // would otherwise rewrite `publishedAt` and move the issue's date. `updateMany` because
+  // Prisma's `update` only accepts unique fields; `ArticleGroup` holds no encrypted columns, so
+  // `updateMany` is safe here (see `lib/CLAUDE.md`).
+  //
   // `scheduledAt` is cleared because the schedule has now been consumed; leaving it set means
   // a later unpublish drops the issue back to DRAFT with a past schedule, and the cron job
   // republishes it within the minute.
-  await prisma.articleGroup.update({
-    where: { id },
+  const { count } = await prisma.articleGroup.updateMany({
+    where: { id, status: "DRAFT" },
     data: { status: "PUBLISHED", publishedAt: new Date(), scheduledAt: null },
   });
+  if (count === 0) throw new Error("Issue is already published");
 
   revalidatePath("/");
   invalidateHomepage();

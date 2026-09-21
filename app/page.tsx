@@ -281,7 +281,14 @@ export default async function HomePage({
 }) {
   const session = await auth();
   const { page: pageParam } = await searchParams;
-  const currentPage = Math.max(1, parseInt(pageParam ?? "1", 10) || 1);
+  // Clamped before it is used: `currentPage` becomes part of the in-process page-cache key
+  // (`homepage:page=N`), so an unbounded value would let a scripted sweep of ?page=1..1e9 grow
+  // the cache one entry per request. 10 000 editions is far beyond any real archive.
+  const MAX_PAGE = 10_000;
+  const currentPage = Math.min(
+    MAX_PAGE,
+    Math.max(1, parseInt(pageParam ?? "1", 10) || 1),
+  );
 
   const {
     totalPages,

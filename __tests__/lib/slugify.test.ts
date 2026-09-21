@@ -124,10 +124,10 @@ describe("withRandomSuffix", () => {
     expect(slug).toMatch(/^hello-world-[a-z0-9]{4}$/);
   });
 
-  it("does not stack suffixes on repeated calls", () => {
-    const once = withRandomSuffix("hello-world");
-    const twice = withRandomSuffix(once);
-    expect(twice).toMatch(/^hello-world-[a-z0-9]{4}$/);
+  // It must NOT strip a trailing 4-char segment: that segment is usually a real word, and
+  // eating it would hand back a different article's slug.
+  it("keeps a real 4-letter trailing word", () => {
+    expect(withRandomSuffix("hello-world-news")).toMatch(/^hello-world-news-[a-z0-9]{4}$/);
   });
 });
 
