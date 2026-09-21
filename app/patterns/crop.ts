@@ -49,7 +49,9 @@ export function cropRatioClass(
     const parsed = parseCustom(custom);
     return parsed ? `${parsed[0]}/${parsed[1]}` : undefined;
   }
-  return CROP_RATIOS[crop ?? ""] ?? undefined;
+  // `Object.hasOwn`, not a bare lookup: `CROP_RATIOS["constructor"]` would
+  // otherwise resolve to a prototype member and be treated as a ratio.
+  return crop && Object.hasOwn(CROP_RATIOS, crop) ? CROP_RATIOS[crop] : undefined;
 }
 
 /**

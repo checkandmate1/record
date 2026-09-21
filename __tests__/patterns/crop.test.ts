@@ -14,7 +14,21 @@ describe("cropRatioClass", () => {
   it("returns undefined for a missing or unknown crop", () => {
     expect(cropRatioClass(null, null)).toBeUndefined();
     expect(cropRatioClass(undefined, null)).toBeUndefined();
+    expect(cropRatioClass("", null)).toBeUndefined();
     expect(cropRatioClass("diagonal", null)).toBeUndefined();
+  });
+
+  it("does not resolve prototype keys to a ratio", () => {
+    // A bare `CROP_RATIOS[crop]` returns Object.prototype members for these.
+    expect(cropRatioClass("constructor", null)).toBeUndefined();
+    expect(cropRatioClass("toString", null)).toBeUndefined();
+    expect(cropRatioClass("__proto__", null)).toBeUndefined();
+    expect(cropRatioClass("hasOwnProperty", null)).toBeUndefined();
+  });
+
+  it("does not resolve prototype keys through parseCropRatio either", () => {
+    expect(parseCropRatio("constructor", null)).toBeNull();
+    expect(parseCropRatio("toString", null)).toBeNull();
   });
 
   it("reads a custom ratio", () => {
