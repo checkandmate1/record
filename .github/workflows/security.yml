@@ -23,7 +23,7 @@ jobs:
     name: npm audit (high+)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v5
         with:
           node-version: "22"
@@ -60,7 +60,7 @@ jobs:
       AWS_REGION: us-east-1
       AWS_S3_BUCKET: build-placeholder
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v5
         with:
           node-version: "22"
