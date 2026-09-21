@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useId, useCallback } from "react";
 import Link from "next/link";
 import { signOutAction } from "@/app/sign-out-action";
 import { isDashboardRole, isAdminRole, roleLabel } from "@/lib/roles";
@@ -20,6 +20,8 @@ export function AccountDropdown({
 }: AccountDropdownProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuId = useId();
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -31,13 +33,32 @@ export function AccountDropdown({
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
+  // Escape closes the menu and hands focus back to the trigger.
+  const closeAndRestoreFocus = useCallback(() => {
+    setOpen(false);
+    triggerRef.current?.focus();
+  }, []);
+
   const firstInitial = userName?.charAt(0)?.toUpperCase() ?? "?";
   const displayRole = roleLabel(userRole);
 
   return (
-    <div ref={ref} className="relative">
+    <div
+      ref={ref}
+      className="relative"
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && open) {
+          e.stopPropagation();
+          closeAndRestoreFocus();
+        }
+      }}
+    >
       <button
+        ref={triggerRef}
+        type="button"
         onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        aria-controls={menuId}
         className="cursor-pointer flex items-center gap-2 font-headline tracking-wide transition-colors hover:text-maroon"
       >
         <span className="hidden md:inline">{userName ?? "Account"}</span>
@@ -49,6 +70,10 @@ export function AccountDropdown({
       </button>
 
       <div
+        id={menuId}
+        // A closed menu keeps its transition but must not be reachable by Tab
+        // or announced by a screen reader.
+        inert={!open}
         className={`absolute right-0 top-full mt-2 w-64 z-50 font-body origin-top transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] overflow-hidden ${
           open
             ? "max-h-80 opacity-100 pointer-events-auto bg-white border border-ink/15 shadow-[0_4px_20px_rgba(0,0,0,0.08)]"

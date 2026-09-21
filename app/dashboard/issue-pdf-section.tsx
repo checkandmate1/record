@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useId, useRef, useState, useTransition } from "react";
 import { setIssuePdf, removeIssuePdf } from "@/app/dashboard/group-actions";
 
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
@@ -32,6 +32,7 @@ export function IssuePdfSection(props: IssuePdfSectionProps) {
   const { groupId, hasPdf, pdfFilename, pdfByteSize, pdfUploadedAt, canManage } = props;
 
   const fileRef = useRef<HTMLInputElement>(null);
+  const fileInputId = useId();
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [, startTransition] = useTransition();
@@ -136,16 +137,22 @@ export function IssuePdfSection(props: IssuePdfSectionProps) {
             </a>
             {canManage && (
               <>
-                <label className="cursor-pointer font-headline text-[12px] font-bold tracking-wide text-ink hover:text-maroon transition-colors">
+                {/* The styled <label> is the visible control; the input stays
+                    sr-only (not `hidden`) so it is still keyboard-reachable. */}
+                <input
+                  id={fileInputId}
+                  ref={fileRef}
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  onChange={onPick}
+                  disabled={uploading}
+                  className="sr-only peer"
+                />
+                <label
+                  htmlFor={fileInputId}
+                  className="cursor-pointer font-headline text-[12px] font-bold tracking-wide text-ink hover:text-maroon transition-colors peer-focus-visible:underline peer-focus-visible:text-maroon"
+                >
                   Replace
-                  <input
-                    ref={fileRef}
-                    type="file"
-                    accept="application/pdf,.pdf"
-                    onChange={onPick}
-                    disabled={uploading}
-                    className="hidden"
-                  />
                 </label>
                 <button
                   type="button"
@@ -165,17 +172,23 @@ export function IssuePdfSection(props: IssuePdfSectionProps) {
             No PDF attached.
           </p>
           {canManage && (
-            <label className="cursor-pointer font-headline font-bold text-[13px] tracking-wide bg-ink text-white px-4 py-2 hover:bg-maroon transition-colors">
-              {uploading ? "Uploading…" : "Upload PDF"}
+            <>
               <input
+                id={fileInputId}
                 ref={fileRef}
                 type="file"
                 accept="application/pdf,.pdf"
                 onChange={onPick}
                 disabled={uploading}
-                className="hidden"
+                className="sr-only peer"
               />
-            </label>
+              <label
+                htmlFor={fileInputId}
+                className="cursor-pointer font-headline font-bold text-[13px] tracking-wide bg-ink text-white px-4 py-2 hover:bg-maroon transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-maroon"
+              >
+                {uploading ? "Uploading…" : "Upload PDF"}
+              </label>
+            </>
           )}
         </div>
       )}

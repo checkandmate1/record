@@ -5,7 +5,9 @@ const createJestConfig = nextJest({ dir: "./" });
 
 const config: Config = {
   testEnvironment: "node",
-  testMatch: ["**/__tests__/**/*.test.ts"],
+  // `.tsx` suites (React components) opt into jsdom with a per-file
+  // `@jest-environment jsdom` docblock; the default stays `node`.
+  testMatch: ["**/__tests__/**/*.test.ts", "**/__tests__/**/*.test.tsx"],
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/$1",
     // Map isomorphic-dompurify to a manual mock that uses native require

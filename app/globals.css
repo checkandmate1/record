@@ -181,3 +181,66 @@ body {
 .footer-visible .footer-rule-draw {
   animation: ruleDrawAcross 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.55s both;
 }
+
+/* Right-hand drawer slide-in (Dialog panels, e.g. Past Round Tables).
+   Lives here rather than in an inline <style> tag so prefers-reduced-motion
+   can switch it off. */
+@keyframes drawerInRight {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.drawer-in-right {
+  animation: drawerInRight 320ms cubic-bezier(0.32, 0, 0.2, 1) both;
+}
+
+/* ── Reduced motion ──
+   Everything on this site is decorative motion: staggered reveals, the footer
+   pop-in, the page cross-fade (View Transitions), the round-table drawer and
+   the round-table spin intro (whose keyframes live in an inline <style> in
+   round-table-spin-intro.tsx). Readers who ask for less motion get the end
+   state immediately instead. Durations collapse rather than being set to
+   `none` so `animationend` / `transitionend` handlers still fire. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* View-transition cross-fade between pages. */
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none !important;
+  }
+
+  /* Elements that start invisible and are only revealed by an animation must
+     not be left hidden if that animation never runs. */
+  .reveal,
+  .warm-fade,
+  .page-enter,
+  .footer-stagger-1,
+  .footer-stagger-2,
+  .footer-stagger-3 {
+    opacity: 1 !important;
+  }
+
+  .footer-reveal {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .footer-rule-draw,
+  .drawer-in-right {
+    transform: none !important;
+  }
+}

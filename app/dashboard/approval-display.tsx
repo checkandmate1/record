@@ -120,6 +120,7 @@ export function ApprovalDisplay({
                     type="button"
                     onClick={() => onRemoveApproval(a.approvalId)}
                     className="cursor-pointer ml-auto text-caption/40 hover:text-maroon text-[14px]"
+                    aria-label={`Remove ${a.name}’s approval`}
                     title="Remove approval"
                   >
                     &times;

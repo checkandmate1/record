@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { isDashboardRole } from "@/lib/roles";
 
@@ -21,6 +21,29 @@ export function HamburgerButton({
   userRole?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const menuId = useId();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  // Escape closes the drawer and hands focus back to the hamburger.
+  const close = useCallback(() => {
+    setOpen(false);
+    triggerRef.current?.focus();
+  }, []);
+
+  // Opening the drawer moves focus into it, so the next Tab lands on the menu.
+  useEffect(() => {
+    if (open) closeRef.current?.focus();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") close();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, close]);
 
   const pages: { label: string; href: string }[] = [{ label: "Home", href: "/" }];
   if (isAuthenticated) {
@@ -35,7 +58,11 @@ export function HamburgerButton({
   return (
     <>
       <button
+        ref={triggerRef}
+        type="button"
         aria-label="Open menu"
+        aria-expanded={open}
+        aria-controls={menuId}
         className="p-1 cursor-pointer"
         onClick={() => setOpen(true)}
       >
@@ -54,14 +81,20 @@ export function HamburgerButton({
 
       {/* Backdrop — fades in/out */}
       <div
+        aria-hidden="true"
         className={`fixed inset-0 bg-black/20 z-40 transition-opacity duration-300 ${
           open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
         }`}
-        onClick={() => setOpen(false)}
+        onClick={close}
       />
 
       {/* Slide-out panel */}
       <nav
+        id={menuId}
+        aria-label="Site menu"
+        // A closed drawer keeps its slide transition but must not be reachable
+        // by Tab or announced by a screen reader.
+        inert={!open}
         className={`fixed top-0 left-0 h-full w-72 bg-white z-50 shadow-[4px_0_24px_rgba(0,0,0,0.08)] transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
@@ -72,9 +105,11 @@ export function HamburgerButton({
             The Record
           </span>
           <button
+            ref={closeRef}
+            type="button"
             aria-label="Close menu"
             className="cursor-pointer p-1 hover:text-maroon transition-colors"
-            onClick={() => setOpen(false)}
+            onClick={close}
           >
             <svg
               width="20"

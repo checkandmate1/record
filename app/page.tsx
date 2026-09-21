@@ -387,8 +387,16 @@ export default async function HomePage({
       <main className="max-w-[1200px] mx-auto px-4 sm:px-8 pt-8 pb-16">
         {(mainBlocks.length > 0 || sidebarBlocks.length > 0) ? (
           <div className="flex flex-col lg:flex-row">
-            {/* Main Column */}
-            <div className="lg:flex-[2] lg:border-r lg:border-neutral-200 lg:pr-8">
+            {/* Main Column. The sr-only headings keep the document outline
+                h1 (masthead) -> h2 (region) -> h3 (pattern headlines); the
+                layout patterns start at h3, so without them the page skips. */}
+            <section
+              aria-labelledby="home-main-heading"
+              className="lg:flex-[2] lg:border-r lg:border-neutral-200 lg:pr-8"
+            >
+              <h2 id="home-main-heading" className="sr-only">
+                Top stories
+              </h2>
               {mainBlocks.map((block, i) => (
                 <div key={block.id}>
                   <PatternRenderer block={block} />
@@ -397,9 +405,15 @@ export default async function HomePage({
                   )}
                 </div>
               ))}
-            </div>
+            </section>
             {/* Sidebar */}
-            <div className="lg:flex-[1] lg:pl-8 mt-8 lg:mt-0 border-t lg:border-t-0 border-neutral-200 pt-8 lg:pt-0">
+            <section
+              aria-labelledby="home-sidebar-heading"
+              className="lg:flex-[1] lg:pl-8 mt-8 lg:mt-0 border-t lg:border-t-0 border-neutral-200 pt-8 lg:pt-0"
+            >
+              <h2 id="home-sidebar-heading" className="sr-only">
+                More in this issue
+              </h2>
               {sidebarBlocks.map((block, i) => (
                 <div key={block.id}>
                   <PatternRenderer block={block} />
@@ -408,7 +422,7 @@ export default async function HomePage({
                   )}
                 </div>
               ))}
-            </div>
+            </section>
           </div>
         ) : (
           <div className="text-center py-24">
@@ -420,7 +434,10 @@ export default async function HomePage({
 
         {/* ---- FULL ROW BLOCKS ---- */}
         {fullBlocks.length > 0 && (
-          <div className="mt-12 space-y-8">
+          <section aria-labelledby="home-full-heading" className="mt-12 space-y-8">
+            <h2 id="home-full-heading" className="sr-only">
+              Featured
+            </h2>
             {fullBlocks.map((block, i) => (
               <div key={block.id}>
                 <PatternRenderer block={block} />
@@ -429,7 +446,7 @@ export default async function HomePage({
                 )}
               </div>
             ))}
-          </div>
+          </section>
         )}
 
         {/* ---- ROUND TABLE TEASER ---- */}
