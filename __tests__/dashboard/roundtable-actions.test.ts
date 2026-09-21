@@ -194,7 +194,8 @@ describe("updateRoundTable validation and bounds", () => {
 describe("updateRoundTable slug", () => {
   it("regenerates the slug when the prompt changed", async () => {
     await updateRoundTable("rt1", roundTableForm({ prompt: "A brand new question?" }));
-    expect(mockSlug).toHaveBeenCalledWith("A brand new question?");
+    // The row being updated is excluded so its own slug is not a collision.
+    expect(mockSlug).toHaveBeenCalledWith("A brand new question?", "rt1");
     expect(db.roundTable.update.mock.calls[0][0].data.slug).toBe("regenerated-slug");
   });
 

@@ -21,7 +21,7 @@ key (`alias/the-record-articles-staging`), its own IAM user, and its own `NEXTAU
 
 | File | Purpose |
 |---|---|
-| `provision.sh` | One-time (idempotent) box setup: packages, nvm node 22, pm2, swap, both checkouts, Postgres DBs, nginx + certbot. |
+| `provision.sh` | One-time (idempotent) box setup: packages, nvm node 22, pm2, swap, both checkouts, Postgres DBs, nginx + certbot, `/etc/cron.d/record-publish`. |
 | `harden.sh` | Idempotent security hardening: unattended upgrades, ufw, fail2ban, key-only sshd, sysctl. Refuses to run if no SSH key is installed. |
 | `deploy.sh prod\|staging` | The deploy sequence (fetch → `npm ci` → prisma generate/migrate → build → pm2 reload → smoke test). Used by both workflows and by hand. |
 | `ecosystem.config.js` | pm2 definitions for `record` and `record-staging`. |
@@ -49,6 +49,7 @@ key (`alias/the-record-articles-staging`), its own IAM user, and its own `NEXTAU
    ```bash
    openssl rand -base64 32   # NEXTAUTH_SECRET
    openssl rand -hex 32      # ENCRYPTION_KEY
+   openssl rand -hex 32      # CRON_SECRET — per environment; see "Scheduled publishing" below
    ```
 5. **Google OAuth.** In Google Cloud Console add `https://recordstaging.mtrokel.org/api/auth/callback/google`
    as an authorised redirect URI on the existing client (prod's is already there).
@@ -88,6 +89,39 @@ key (`alias/the-record-articles-staging`), its own IAM user, and its own `NEXTAU
   Rows stay decryptable because both environments share the KMS key, **but** blind indexes (`emailHash`
   etc.) are keyed by `ENCRYPTION_KEY`, so after a copy either sign-in lookups fail on staging or you
   temporarily set staging's `ENCRYPTION_KEY` to prod's. Prefer seeding staging with test accounts instead.
+
+## Scheduled publishing
+
+"Schedule" in the issue editor only writes `ArticleGroup.scheduledAt`. What actually promotes the
+issue is a cron job that POSTs to the app once a minute:
+
+```
+/etc/cron.d/record-publish   (written by provision.sh, 0644 root:root)
+* * * * * root curl -fsS -m 30 -X POST -H "Authorization: Bearer $(grep ^CRON_SECRET= /var/www/record/.env | cut -d= -f2-)" http://127.0.0.1:3001/api/cron/publish-scheduled >/dev/null 2>&1
+* * * * * root curl … /var/www/record-staging/.env … http://127.0.0.1:3002/api/cron/publish-scheduled …
+```
+
+The route publishes every `DRAFT` group whose `scheduledAt` has passed, through the same code path
+as the Publish button (`lib/publish-group.ts`), and answers
+`{"published":["<id>",…],"skipped":[{"id":"…","reason":"…"}]}`. An issue with no volume/issue number
+is skipped with a reason, not retried into an error — set those numbers and it goes out on the next
+tick. Publishing clears `scheduledAt`, so unpublishing later does not re-fire the old schedule.
+
+- **Adding it to an existing box** (or after editing the line): re-run `bash deploy/provision.sh`
+  — it is idempotent and rewrites the file — or drop the file in by hand and
+  `systemctl restart cron`.
+- **`CRON_SECRET` must be in both `.env` files** (`openssl rand -hex 32`, different per
+  environment). Without it the route returns 500 and logs
+  `[cron/publish-scheduled] CRON_SECRET is not set`; a wrong secret gets a 401. `.env` changes
+  need a pm2 reload (`bash deploy/deploy.sh prod`) before the app sees them — the cron line itself
+  re-reads the file every minute.
+- **Check it by hand:**
+  ```bash
+  ssh linode 'curl -isS -X POST -H "Authorization: Bearer $(grep ^CRON_SECRET= /var/www/record/.env | cut -d= -f2-)" http://127.0.0.1:3001/api/cron/publish-scheduled'
+  ssh linode 'grep CRON /var/log/syslog | tail'
+  ```
+- The route is exempt from the site-wide login gate in `proxy.ts` (it has its own credential) but
+  still rate-limited per IP; cron sends no Origin/Referer, which the proxy's CSRF check allows.
 
 ## Gotchas
 

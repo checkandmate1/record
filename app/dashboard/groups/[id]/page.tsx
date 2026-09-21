@@ -18,6 +18,7 @@ import {
 import { SavedToast } from "@/app/dashboard/saved-toast";
 import { ApprovalDisplay } from "@/app/dashboard/approval-display";
 import { IssuePdfSection } from "@/app/dashboard/issue-pdf-section";
+import { ScheduleForm } from "@/app/dashboard/schedule-form";
 import { joinAuthorNames, formatIssueTitle } from "@/lib/article-helpers";
 import { getSiteVolumeAndIssue } from "@/lib/site-volume";
 import { isDashboardRole, isEditorRole } from "@/lib/roles";
@@ -214,22 +215,12 @@ export default async function GroupEditorPage({
               </button>
             </form>
           )}
+          {/* ScheduleForm carries its own sr-only <label htmlFor="group-scheduled-at">. */}
           {canPublish && group.status === "DRAFT" && (
-            <form action={boundSchedule} className="flex gap-2 items-center">
-              <label htmlFor="group-scheduled-at" className="sr-only">
-                Schedule publication
-              </label>
-              <input
-                id="group-scheduled-at"
-                type="datetime-local"
-                name="scheduledAt"
-                defaultValue={group.scheduledAt?.toISOString().slice(0, 16) ?? ""}
-                className="border border-ink/20 px-3 py-2 font-headline text-[13px] outline-none focus:border-ink transition-colors"
-              />
-              <button type="submit" className="cursor-pointer font-headline font-bold text-[13px] tracking-wide border border-ink/20 px-4 py-2 hover:border-maroon hover:text-maroon transition-colors">
-                Schedule
-              </button>
-            </form>
+            <ScheduleForm
+              scheduledAtIso={group.scheduledAt?.toISOString() ?? null}
+              action={boundSchedule}
+            />
           )}
           {canManage && (
             <form action={boundDelete} className="ml-auto">

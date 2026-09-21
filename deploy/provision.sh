@@ -115,7 +115,33 @@ done
 nginx -t && systemctl enable --now nginx && systemctl reload nginx
 systemctl enable --now certbot.timer 2>/dev/null || true
 
+log "scheduled publishing (cron -> POST /api/cron/publish-scheduled)"
+# `scheduleGroup` only writes ArticleGroup.scheduledAt; this is what makes the schedule fire.
+# One line per environment, hitting the app on localhost so the request never leaves the box.
+# Notes on the syntax, all of which bite in cron.d specifically:
+#   - cron.d lines need the user field ("root") between the schedule and the command.
+#   - the command is handed to $SHELL -c, so $(...) is a normal command substitution.
+#   - a literal % would be read as a newline by cron and must be escaped; there is none here.
+#   - `cut -d= -f2-` keeps everything after the FIRST '=' so base64/hex secrets survive intact.
+#   - `-f` makes curl exit non-zero on 4xx/5xx and `-m 30` stops a hung request piling up jobs.
+#   - the filename has no dot: run-parts/cron ignores files containing one.
+# Heredoc is quoted so $( ) is written literally and evaluated by cron, not by provision.sh.
+cat > /etc/cron.d/record-publish <<'CRON'
+# Publish issues whose scheduledAt has passed. Installed by deploy/provision.sh.
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+MAILTO=""
+* * * * * root curl -fsS -m 30 -X POST -H "Authorization: Bearer $(grep ^CRON_SECRET= /var/www/record/.env | cut -d= -f2-)" http://127.0.0.1:3001/api/cron/publish-scheduled >/dev/null 2>&1
+* * * * * root curl -fsS -m 30 -X POST -H "Authorization: Bearer $(grep ^CRON_SECRET= /var/www/record-staging/.env | cut -d= -f2-)" http://127.0.0.1:3002/api/cron/publish-scheduled >/dev/null 2>&1
+CRON
+chmod 644 /etc/cron.d/record-publish
+chown root:root /etc/cron.d/record-publish
+systemctl restart cron 2>/dev/null || systemctl restart crond 2>/dev/null || true
+
 log "done. Next: fill in /var/www/record/.env and /var/www/record-staging/.env, then"
 echo "  bash /var/www/record/deploy/deploy.sh prod"
 echo "  bash /var/www/record-staging/deploy/deploy.sh staging"
 echo "  bash /var/www/record/deploy/harden.sh"
+echo
+echo "Both .env files need CRON_SECRET (openssl rand -hex 32) or scheduled issues never publish;"
+echo "/etc/cron.d/record-publish reads it from each checkout's .env on every run."

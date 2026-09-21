@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { userMinimalNameSelect } from "@/lib/prisma-selects";
 import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import { AccountDropdown } from "@/app/account-dropdown";
 import { HamburgerButton } from "@/app/sidebar-menu";
 import { Footer } from "@/app/footer";
@@ -280,7 +281,14 @@ export default async function HomePage({
 }) {
   const session = await auth();
   const { page: pageParam } = await searchParams;
-  const currentPage = Math.max(1, parseInt(pageParam ?? "1", 10) || 1);
+  // Clamped before it is used: `currentPage` becomes part of the in-process page-cache key
+  // (`homepage:page=N`), so an unbounded value would let a scripted sweep of ?page=1..1e9 grow
+  // the cache one entry per request. 10 000 editions is far beyond any real archive.
+  const MAX_PAGE = 10_000;
+  const currentPage = Math.min(
+    MAX_PAGE,
+    Math.max(1, parseInt(pageParam ?? "1", 10) || 1),
+  );
 
   const {
     totalPages,
@@ -297,6 +305,13 @@ export default async function HomePage({
     currentGroupId,
     currentGroupHasPdf,
   } = await getOrLoad(`homepage:page=${currentPage}`, () => loadHomepageData(currentPage));
+
+  // One page == one published edition, so `/?page=99` used to render the "No editions published
+  // yet." empty state as though the archive were empty. Send those requests to the last real
+  // page instead. Page 1 with nothing published keeps the empty state — there is nowhere to go.
+  if (totalPages > 0 && currentPage > totalPages) {
+    redirect(totalPages === 1 ? "/" : `/?page=${totalPages}`);
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-white font-body page-enter">
