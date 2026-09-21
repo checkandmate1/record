@@ -1,8 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useSyncExternalStore, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { isoToLocalInput, localInputToIso } from "@/lib/datetime-local";
+
+/** Nothing to subscribe to — the value only ever differs between server and client. */
+const noopSubscribe = () => () => {};
 
 /**
  * The schedule control on the issue editor.
@@ -10,9 +13,12 @@ import { isoToLocalInput, localInputToIso } from "@/lib/datetime-local";
  * `scheduleGroup` requires an ISO 8601 instant with an explicit UTC offset: a bare
  * `<input type="datetime-local">` value has no zone, so the server would read the editor's
  * 6 PM as 6 PM UTC. This component converts the value in the BROWSER — where "local" is the
- * editor's zone — before calling the action, shows the action's error inline instead of
- * throwing into the route error boundary (same shape as `layout-builder.tsx`), and disables
- * the button while the request is in flight.
+ * editor's zone — before calling the action.
+ *
+ * Errors are RETURNED by the action (`{ ok: false, error }`), not thrown: a production build
+ * masks thrown server-action messages as "An error occurred in the Server Components render",
+ * so the real reason would never reach the editor. They render inline in the same shape
+ * `app/dashboard/layout-builder.tsx` uses, and the button is disabled while pending.
  */
 export function ScheduleForm({
   scheduledAtIso,
@@ -21,11 +27,23 @@ export function ScheduleForm({
   /** The issue's current `scheduledAt`, as an ISO string (null when unscheduled). */
   scheduledAtIso: string | null;
   /** `scheduleGroup` already bound to the group id. */
-  action: (formData: FormData) => Promise<void>;
+  action: (formData: FormData) => Promise<{ ok: true } | { ok: false; error: string }>;
 }) {
-  // Rendered from the ISO instant on the client so the input shows the editor's local time,
-  // not UTC. It starts empty on the server pass and fills in on hydration.
-  const [value, setValue] = useState(() => isoToLocalInput(scheduledAtIso));
+  // Empty for the server pass AND for hydration, then the real local time on the client.
+  // Formatting `scheduledAtIso` during render would use the SERVER's zone (UTC on the box) and
+  // the browser's, producing two different values for the same markup — a hydration mismatch on
+  // every already-scheduled draft. `useSyncExternalStore` is React's supported way to render a
+  // client-only value; the snapshot is a primitive string, so repeated calls compare equal and
+  // it does not loop.
+  const localValue = useSyncExternalStore(
+    noopSubscribe,
+    () => isoToLocalInput(scheduledAtIso),
+    () => "",
+  );
+  // Set once the editor types, so a re-render never clobbers what they are entering.
+  const [edited, setEdited] = useState<string | null>(null);
+  const value = edited ?? localValue;
+
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
@@ -40,16 +58,28 @@ export function ScheduleForm({
       setError("Pick a date and time to schedule this issue.");
       return;
     }
+    // The server checks this too; doing it here saves a round trip and gives the same wording.
+    if (new Date(iso).getTime() <= Date.now()) {
+      setError("Scheduled time must be in the future");
+      return;
+    }
 
     const formData = new FormData();
     formData.set("scheduledAt", iso);
 
     startTransition(async () => {
       try {
-        await action(formData);
+        const result = await action(formData);
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+        // Drop back to the server's value, which the refresh is about to update.
+        setEdited(null);
         router.refresh();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "That schedule could not be saved.");
+      } catch {
+        // Only auth/permission failures throw, and those are masked in production anyway.
+        setError("That schedule could not be saved.");
       }
     });
   }
@@ -67,7 +97,7 @@ export function ScheduleForm({
           type="datetime-local"
           name="scheduledAt"
           value={value}
-          onChange={(e) => setValue(e.target.value)}
+          onChange={(e) => setEdited(e.target.value)}
           className="border border-ink/20 px-3 py-2 font-headline text-[13px] outline-none focus:border-ink transition-colors"
         />
         <button

@@ -159,21 +159,32 @@ export async function unpublishGroup(id: string) {
 const ISO_WITH_OFFSET =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/;
 
-export async function scheduleGroup(id: string, formData: FormData) {
+/**
+ * Validation failures are RETURNED, not thrown: in a production build Next masks a thrown
+ * server-action error as "An error occurred in the Server Components render", so "must be in the
+ * future" would never reach the editor. Only auth failures still throw — those are permission
+ * bugs, not something the user can fix by editing the field.
+ */
+export async function scheduleGroup(
+  id: string,
+  formData: FormData,
+): Promise<{ ok: true } | { ok: false; error: string }> {
   const session = await auth();
   requireEditor(session);
 
   const scheduledAt = String(formData.get("scheduledAt") ?? "").trim();
   if (!ISO_WITH_OFFSET.test(scheduledAt)) {
-    throw new Error(
-      "Scheduled time must be an ISO 8601 timestamp with a UTC offset (e.g. 2026-09-20T22:00:00.000Z)",
-    );
+    return {
+      ok: false,
+      error:
+        "Scheduled time must be an ISO 8601 timestamp with a UTC offset (e.g. 2026-09-20T22:00:00.000Z)",
+    };
   }
 
   const date = new Date(scheduledAt);
-  if (isNaN(date.getTime())) throw new Error("Invalid date");
+  if (isNaN(date.getTime())) return { ok: false, error: "Invalid date" };
   if (date.getTime() <= Date.now()) {
-    throw new Error("Scheduled time must be in the future");
+    return { ok: false, error: "Scheduled time must be in the future" };
   }
 
   // Prisma stores DateTime as UTC; `date` is already an absolute instant.
@@ -185,6 +196,7 @@ export async function scheduleGroup(id: string, formData: FormData) {
   revalidatePath(`/dashboard/groups/${id}`);
   revalidatePath("/");
   invalidateHomepage();
+  return { ok: true };
 }
 
 export async function deleteGroup(id: string) {

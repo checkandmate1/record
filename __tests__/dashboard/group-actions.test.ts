@@ -451,7 +451,7 @@ describe("scheduleGroup", () => {
 
   it("stores a future instant sent with an explicit offset", async () => {
     const iso = new Date(Date.now() + 86_400_000).toISOString();
-    await scheduleGroup("g1", fd(iso));
+    await expect(scheduleGroup("g1", fd(iso))).resolves.toEqual({ ok: true });
     expect(db.articleGroup.update).toHaveBeenCalledWith({
       where: { id: "g1" },
       data: { scheduledAt: new Date(iso) },
@@ -469,14 +469,27 @@ describe("scheduleGroup", () => {
     });
   });
 
-  it("rejects a timezone-less datetime-local value", async () => {
-    await expect(scheduleGroup("g1", fd("2099-01-01T18:00"))).rejects.toThrow(/offset/i);
+  // Validation failures are RETURNED, not thrown: a production build masks a thrown server-action
+  // message, so the editor would only ever see "An error occurred in the Server Components render".
+  it("returns an error for a timezone-less datetime-local value", async () => {
+    const result = await scheduleGroup("g1", fd("2099-01-01T18:00"));
+    expect(result.ok).toBe(false);
+    expect((result as { error: string }).error).toMatch(/offset/i);
     expect(db.articleGroup.update).not.toHaveBeenCalled();
   });
 
-  it("rejects a date in the past", async () => {
+  it("returns an error for a date in the past", async () => {
     const past = new Date(Date.now() - 60_000).toISOString();
-    await expect(scheduleGroup("g1", fd(past))).rejects.toThrow(/future/i);
+    const result = await scheduleGroup("g1", fd(past));
+    expect(result.ok).toBe(false);
+    expect((result as { error: string }).error).toMatch(/future/i);
+    expect(db.articleGroup.update).not.toHaveBeenCalled();
+  });
+
+  it("returns an error for an empty value rather than throwing", async () => {
+    const result = await scheduleGroup("g1", fd(""));
+    expect(result.ok).toBe(false);
+    expect(db.articleGroup.update).not.toHaveBeenCalled();
   });
 
   it("rejects a WRITER", async () => {
