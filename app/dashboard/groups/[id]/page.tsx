@@ -215,8 +215,8 @@ export default async function GroupEditorPage({
               </button>
             </form>
           )}
+          {/* ScheduleForm carries its own sr-only <label htmlFor="group-scheduled-at">. */}
           {canPublish && group.status === "DRAFT" && (
-            {/* The label/id pair from #56 lives inside ScheduleForm along with the input. */}
             <ScheduleForm
               scheduledAtIso={group.scheduledAt?.toISOString() ?? null}
               action={boundSchedule}
