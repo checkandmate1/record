@@ -36,9 +36,15 @@ function initials(name: string): string {
 export function PastRoundTablesPanel({
   items,
   currentSlug,
+  showIntroControls = false,
 }: {
   items: SidebarRoundTable[];
   currentSlug?: string | null;
+  /**
+   * Renders the QA "Intro Animation" block. Staff only — the pages pass
+   * `isDashboardRole(session.user.role)`. Never default this to `true`.
+   */
+  showIntroControls?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const panelId = useId();
@@ -174,7 +180,7 @@ export function PastRoundTablesPanel({
           </p>
         )}
 
-        <IntroControls />
+        {showIntroControls && <IntroControls />}
       </div>
     </Dialog>
   );

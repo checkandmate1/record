@@ -13,6 +13,7 @@ import {
   EditableImage,
   EditableImagePlaceholder,
 } from "@/app/patterns/editable";
+import { cropRatioClass } from "@/app/patterns/crop";
 import { getPlaceholderArticle } from "@/app/patterns/placeholder";
 
 export function HeroPattern({
@@ -34,17 +35,14 @@ export function HeroPattern({
   const { authors, primaryRole } = getBylineAuthors(article);
   const fs = featuredSlot?.scale;
 
-  const imgCrop = imageSlot?.imageCrop ?? "original";
-  const cropRatio =
-    imgCrop === "landscape"
-      ? "16/9"
-      : imgCrop === "portrait"
-        ? "3/4"
-        : imgCrop === "square"
-          ? "1/1"
-          : imgCrop === "custom" && imageSlot?.imageCropCustom
-            ? imageSlot.imageCropCustom.replace(":", "/")
-            : undefined;
+  const cropRatio = cropRatioClass(imageSlot?.imageCrop, imageSlot?.imageCropCustom);
+
+  // Live mode: an unfilled slot renders nothing (`EditableSlot` returns null), so
+  // its row and divider must go with it — otherwise the layout keeps a stray rule
+  // across empty space. Edit mode keeps every slot so it stays clickable.
+  const visibleHeadlines = editMode
+    ? headlineSlots
+    : headlineSlots.filter((s) => s?.article);
 
   return (
     <div>
@@ -123,16 +121,16 @@ export function HeroPattern({
       </div>
 
       {/* Headline-only articles below */}
-      {(headlineSlots.length > 0 || editMode) && (
+      {(visibleHeadlines.length > 0 || editMode) && (
         <div className="mt-3 pt-3 border-t border-neutral-200 flex gap-4 -mb-2">
-          {headlineSlots.map((slot, idx) => {
+          {visibleHeadlines.map((slot, idx) => {
             const slotArticle = slot?.article ?? getPlaceholderArticle();
             const hlByline = slot?.showByline ? getBylineAuthors(slotArticle) : null;
             return (
               <div
                 key={slot?.id ?? idx}
                 className={`flex-1 ${
-                  idx < headlineSlots.length - 1 ? "border-r border-neutral-200 pr-4" : ""
+                  idx < visibleHeadlines.length - 1 ? "border-r border-neutral-200 pr-4" : ""
                 }`}
               >
                 <EditableSlot slot={slot}>

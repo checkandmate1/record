@@ -1,31 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ONCE_ONLY_KEY, REPLAY_EVENT } from "@/app/roundtable/round-table-spin-intro";
+import { REPLAY_EVENT } from "@/app/roundtable/round-table-spin-intro";
 
+/**
+ * QA-only control in the Round Table drawer.
+ *
+ * **Render this behind a dashboard-role check** — `past-roundtables-panel.tsx`
+ * takes `showIntroControls`, and the pages compute it with `isDashboardRole()`.
+ * Readers must never see it.
+ *
+ * There is no "show only once" toggle any more: the intro always plays at most
+ * once per browser session per edition, and never under `prefers-reduced-motion`
+ * (`round-table-spin-intro.tsx`). This just replays it on demand so the
+ * animation can be checked without clearing session storage.
+ */
 export function IntroControls() {
-  // Default: false (always replay) — flip it on once you're done testing.
-  const [onceOnly, setOnceOnly] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
-
-  useEffect(() => {
-    try {
-      setOnceOnly(window.localStorage.getItem(ONCE_ONLY_KEY) === "1");
-    } catch {
-      /* ignore */
-    }
-    setHydrated(true);
-  }, []);
-
-  function toggle(next: boolean) {
-    setOnceOnly(next);
-    try {
-      window.localStorage.setItem(ONCE_ONLY_KEY, next ? "1" : "0");
-    } catch {
-      /* ignore */
-    }
-  }
-
   function replay() {
     if (typeof window === "undefined") return;
     window.dispatchEvent(new CustomEvent(REPLAY_EVENT));
@@ -34,38 +23,13 @@ export function IntroControls() {
   return (
     <section className="mt-8">
       <h3 className="font-headline text-[11px] font-bold tracking-[0.18em] uppercase text-caption">
-        Intro Animation
+        Intro Animation (staff)
       </h3>
       <div className="mt-3 h-px bg-neutral-200" />
 
-      <label className="mt-3 flex items-center justify-between gap-3 cursor-pointer select-none">
-        <span className="font-headline text-[13px]">Show only once per visit</span>
-        <span className="relative inline-flex shrink-0">
-          <input
-            type="checkbox"
-            className="sr-only peer"
-            checked={onceOnly}
-            onChange={(e) => toggle(e.target.checked)}
-            disabled={!hydrated}
-          />
-          <span
-            aria-hidden="true"
-            className={`block w-9 h-5 rounded-full transition-colors ${
-              onceOnly ? "bg-maroon" : "bg-neutral-300"
-            }`}
-          />
-          <span
-            aria-hidden="true"
-            className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
-              onceOnly ? "translate-x-4" : "translate-x-0"
-            }`}
-          />
-        </span>
-      </label>
-      <p className="mt-2 font-headline text-[11px] text-caption leading-snug">
-        {onceOnly
-          ? "The intro plays once per round-table edition, then is remembered."
-          : "The intro plays every time you open this page."}
+      <p className="mt-3 font-headline text-[11px] text-caption leading-snug">
+        The intro plays once per browser session, and is skipped entirely for
+        readers who have reduced motion turned on.
       </p>
 
       <button

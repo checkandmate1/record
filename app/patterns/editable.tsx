@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useTransition } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEditorContext } from "@/app/patterns/editor-context";
 import { PopulatedSlot, SlotArticle } from "@/app/patterns/types";
+import { parseCropRatio } from "@/app/patterns/crop";
 import {
   assignToBlockSlot,
   assignMediaToBlockSlot,
@@ -20,6 +22,7 @@ import {
   updateImageWidth,
   updateImageCrop,
   updateMediaCredit,
+  updateMediaAlt,
 } from "@/app/dashboard/group-actions";
 
 /* ------------------------------------------------------------------ */
@@ -41,23 +44,147 @@ const SECTION_LABELS: Record<string, string> = {
 export { PLACEHOLDER_BODY, getPlaceholderArticle } from "@/app/patterns/placeholder";
 
 /* ------------------------------------------------------------------ */
-/*  Crop ratio helper                                                  */
+/*  Slot mutations                                                     */
 /* ------------------------------------------------------------------ */
 
-const CROP_RATIOS: Record<string, number | null> = {
-  original: null,
-  landscape: 16 / 9,
-  portrait: 3 / 4,
-  square: 1,
-};
+/** Mirrors `MEDIA_TEXT_MAX` in app/dashboard/group-schemas.ts (the server rejects longer). */
+const MEDIA_TEXT_MAX = 300;
 
-function parseCropRatio(crop: string, custom: string | null): number | null {
-  if (crop === "custom" && custom) {
-    const [w, h] = custom.split(":").map(Number);
-    if (w > 0 && h > 0) return w / h;
-  }
-  return CROP_RATIOS[crop] ?? null;
+/**
+ * Runs one slot server action, the way `layout-builder.tsx`'s `run()` runs block
+ * actions. Keep the two in step.
+ *
+ * Every slot action is gated (`requireDashboardRole` -> `requireGroupMutable` ->
+ * a group-scoped write) and Zod-validated, so it throws for a WRITER touching a
+ * published issue, for a slot outside the group, or for a bad value. Calling
+ * them fire-and-forget turned that into an unhandled rejection plus a toolbar
+ * that silently did nothing. This awaits the action, `router.refresh()`es so the
+ * next click reads fresh slot props instead of the render-time snapshot, and
+ * hands the message back for an inline `role="alert"` next to the control.
+ *
+ * `run(fn, onError)` — pass `onError` whenever the click optimistically moved
+ * something on screen. A rejected action leaves the server value untouched, so
+ * nothing in the refreshed props can undo the optimistic value; the caller has
+ * to. In practice `onError` is a `Transient.reset`.
+ */
+function useSlotMutation() {
+  const [error, setError] = useState<string | null>(null);
+  const [busy, startTransition] = useTransition();
+  const router = useRouter();
+  // `busy` only flips on the next render, so two clicks dispatched in the same
+  // tick would both read `false`. The ref flips synchronously and is the real
+  // lock; `busy` just drives the disabled chrome.
+  const inFlight = useRef(false);
+
+  const run = useCallback(
+    (fn: () => Promise<unknown>, onError?: () => void) => {
+      if (inFlight.current) return;
+      inFlight.current = true;
+      setError(null);
+      startTransition(async () => {
+        try {
+          await fn();
+          router.refresh();
+        } catch (e) {
+          setError(e instanceof Error ? e.message : "That change could not be saved.");
+          onError?.();
+        } finally {
+          inFlight.current = false;
+        }
+      });
+    },
+    [router],
+  );
+
+  const clearError = useCallback(() => setError(null), []);
+
+  return { run, busy, error, clearError };
 }
+
+type RunSlotAction = ReturnType<typeof useSlotMutation>["run"];
+
+/** Inline failure message for a slot control, rendered next to that control. */
+function SlotError({
+  message,
+  onDismiss,
+  className = "",
+}: {
+  message: string | null;
+  onDismiss?: () => void;
+  className?: string;
+}) {
+  if (!message) return null;
+  return (
+    <p
+      role="alert"
+      className={`font-headline text-[10px] leading-snug text-maroon bg-white/95 border border-maroon/30 px-1.5 py-1 ${className}`}
+    >
+      {message}
+      {onDismiss && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDismiss();
+          }}
+          className="cursor-pointer ml-1.5 text-maroon/60 hover:text-maroon"
+          aria-label="Dismiss error"
+        >
+          &times;
+        </button>
+      )}
+    </p>
+  );
+}
+
+/** One optimistically-editable slot field. See `useTransientOverride`. */
+export interface Transient<T> {
+  /** What to render: the local override while one is live, else the server value. */
+  value: T;
+  /** Nudge it locally — a drag in progress, a half-typed box. */
+  set: (v: T) => void;
+  /**
+   * Drop the override and fall back to the server value. Pass this as `run`'s
+   * `onError`: a rejected mutation leaves the server value unchanged, so without
+   * an explicit reset the refused value would keep rendering until a reload.
+   */
+  reset: () => void;
+}
+
+/**
+ * A slot field the user can nudge locally (drag a slider, type in a box) before
+ * the server has confirmed it.
+ *
+ * `slot.<field>` stays the single source of truth: the local override only lives
+ * between the first drag and the refreshed prop arriving, and is dropped the
+ * moment the server value changes. Two copies of `useState(slot.imageWidth)`
+ * used to drift apart — the popup slider moved one and `ResizableImage` rendered
+ * the other, so a resize didn't show until a hard reload.
+ *
+ * Exported for `__tests__/patterns/use-transient-override.test.ts`.
+ */
+export function useTransientOverride<T>(serverValue: T): Transient<T> {
+  // The override is stored together with the server value it was made against.
+  // Once the refreshed prop differs from that base the pair no longer matches
+  // and the override is ignored — no effect, no stale copy to keep in sync.
+  const [pending, setPending] = useState<{ base: T; value: T } | null>(null);
+  const value = pending && pending.base === serverValue ? pending.value : serverValue;
+  const set = useCallback((v: T) => setPending({ base: serverValue, value: v }), [serverValue]);
+  // A rejected mutation never changes `serverValue`, so the base still matches
+  // and the override would survive. This is the only way back.
+  const reset = useCallback(() => setPending(null), []);
+  return { value, set, reset };
+}
+
+/**
+ * The slot whose image was just uploaded, so the settings popup can open on its
+ * alt-text field. Module scope rather than component state because the uploader
+ * (`EditableImagePlaceholder`) unmounts when the refresh lands and a different
+ * component (`EditableImage`) renders in its place.
+ *
+ * Reading it is pure; it is cleared from an effect once the new image mounts.
+ */
+let altFocusSlotId: string | null = null;
 
 /* ------------------------------------------------------------------ */
 /*  CogButton                                                          */
@@ -212,6 +339,71 @@ function CreditSearch({
 }
 
 /* ------------------------------------------------------------------ */
+/*  AltTextField                                                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Alt text for the slot's image. Uploads deliberately store `""` rather than the
+ * filename — "IMG_4821.jpg" read aloud is worse than nothing — and this is where
+ * a human writes a real description. Empty is a legitimate value: a purely
+ * decorative image should stay `alt=""`.
+ */
+function AltTextField({
+  slot,
+  groupId,
+  run,
+  busy,
+  autoFocus = false,
+}: {
+  slot: PopulatedSlot;
+  groupId: string;
+  run: RunSlotAction;
+  busy: boolean;
+  autoFocus?: boolean;
+}) {
+  const serverAlt = slot.mediaAlt ?? "";
+  const alt = useTransientOverride(serverAlt);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const fieldId = `slot-alt-${slot.id}`;
+
+  useEffect(() => {
+    if (autoFocus) inputRef.current?.focus();
+  }, [autoFocus]);
+
+  function commit(next: string) {
+    const trimmed = next.slice(0, MEDIA_TEXT_MAX);
+    if (trimmed === serverAlt) return;
+    run(() => updateMediaAlt(slot.id, trimmed, groupId), alt.reset);
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <label htmlFor={fieldId} className="font-headline text-[12px] text-caption shrink-0">
+        Alt text
+      </label>
+      <input
+        id={fieldId}
+        ref={inputRef}
+        type="text"
+        value={alt.value}
+        maxLength={MEDIA_TEXT_MAX}
+        disabled={busy}
+        onChange={(e) => alt.set(e.target.value)}
+        onBlur={(e) => commit(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit((e.target as HTMLInputElement).value);
+          }
+        }}
+        placeholder="Describe the image"
+        className="w-[130px] border border-neutral-200 px-2 py-0.5 font-headline text-[11px] tracking-wide placeholder:text-caption/30 outline-none focus:border-maroon disabled:opacity-50"
+      />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  SlotSettingsPopup                                                  */
 /* ------------------------------------------------------------------ */
 
@@ -219,24 +411,26 @@ function SlotSettingsPopup({
   slot,
   groupId,
   pvLen,
-  onPvLenChange,
   imgWidth,
-  onImgWidthChange,
   staffMembers,
   anchorRef,
   onClose,
+  autoFocusAlt = false,
 }: {
   slot: PopulatedSlot;
   groupId: string;
-  pvLen: number;
-  onPvLenChange: (v: number) => void;
-  imgWidth: number;
-  onImgWidthChange: (w: number) => void;
+  // Owned by the parent (`EditableSlot` / `EditableImage`) so the popup slider
+  // and the image on the page move together, and so the override outlives the
+  // popup being closed and reopened.
+  pvLen: Transient<number>;
+  imgWidth: Transient<number>;
   staffMembers: { id: string; name: string }[];
   anchorRef: React.RefObject<HTMLButtonElement | null>;
   onClose: () => void;
+  autoFocusAlt?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const { run, busy, error, clearError } = useSlotMutation();
   const isHeadline = slot.slotRole === "headline";
   const isImageSlot = slot.slotRole === "image" || slot.slotRole === "media";
   const isArticleSlot = !isImageSlot;
@@ -276,14 +470,14 @@ function SlotSettingsPopup({
 
   function commitPvLen(v: number) {
     const clamped = Math.max(50, Math.min(500, v));
-    onPvLenChange(clamped);
-    updateSlotPreviewLength(slot.id, clamped, groupId);
+    pvLen.set(clamped);
+    run(() => updateSlotPreviewLength(slot.id, clamped, groupId), pvLen.reset);
   }
 
   function commitImgWidth(v: number) {
     const clamped = Math.max(10, Math.min(100, v));
-    onImgWidthChange(clamped);
-    updateImageWidth(slot.id, clamped, groupId);
+    imgWidth.set(clamped);
+    run(() => updateImageWidth(slot.id, clamped, groupId), imgWidth.reset);
   }
 
   return createPortal(
@@ -293,6 +487,8 @@ function SlotSettingsPopup({
       style={pos ? { top: pos.top, left: pos.left } : { top: -9999, left: -9999 }}
       onClick={(e) => e.stopPropagation()}
     >
+      <SlotError message={error} onDismiss={clearError} />
+
       {hasImage && (
         <>
           <div className="flex items-center justify-between">
@@ -302,8 +498,9 @@ function SlotSettingsPopup({
                 <button
                   key={f}
                   type="button"
-                  onClick={() => updateImageFloat(slot.id, f, groupId)}
-                  className={`cursor-pointer px-2.5 py-1 font-headline text-[11px] transition-colors ${
+                  disabled={busy}
+                  onClick={() => run(() => updateImageFloat(slot.id, f, groupId))}
+                  className={`cursor-pointer px-2.5 py-1 font-headline text-[11px] transition-colors disabled:opacity-50 ${
                     (slot.imageFloat ?? "full") === f
                       ? "bg-ink text-white"
                       : "text-caption hover:text-maroon"
@@ -320,17 +517,17 @@ function SlotSettingsPopup({
               <span className="font-headline text-[12px] text-caption">Width</span>
               <div className="flex items-center gap-1.5">
                 <span className="font-headline text-[11px] text-caption w-[28px] text-right">
-                  {imgWidth}%
+                  {imgWidth.value}%
                 </span>
                 <input
                   type="range"
                   min="10"
                   max="80"
                   step="5"
-                  value={imgWidth}
-                  onChange={(e) => onImgWidthChange(parseInt(e.target.value, 10))}
-                  onMouseUp={() => commitImgWidth(imgWidth)}
-                  onTouchEnd={() => commitImgWidth(imgWidth)}
+                  value={imgWidth.value}
+                  onChange={(e) => imgWidth.set(parseInt(e.target.value, 10))}
+                  onMouseUp={() => commitImgWidth(imgWidth.value)}
+                  onTouchEnd={() => commitImgWidth(imgWidth.value)}
                   className="w-[80px] h-[12px] accent-maroon"
                 />
               </div>
@@ -341,12 +538,21 @@ function SlotSettingsPopup({
             label="Quick size"
             current={slot.imageScale ?? "M"}
             onChange={(s) => {
-              updateSlotImageScale(slot.id, s, groupId);
               const widthMap: Record<string, number> = { S: 25, M: 50, L: 75, XL: 100 };
               const newW = widthMap[s] ?? 50;
-              onImgWidthChange(newW);
-              updateImageWidth(slot.id, newW, groupId);
-              if (s === "XL") updateImageFloat(slot.id, "full", groupId);
+              imgWidth.set(newW);
+              // One `run` for the whole preset: the in-flight lock drops anything
+              // dispatched while a mutation is running, so these must be awaited
+              // in sequence rather than fired as three separate calls. There is no
+              // transaction across them, so a failure part-way leaves the slot
+              // half-applied (say scale saved, width not) with only the error
+              // shown — the refresh on the next successful change, or a reload,
+              // restores whatever the server actually holds.
+              run(async () => {
+                await updateSlotImageScale(slot.id, s, groupId);
+                await updateImageWidth(slot.id, newW, groupId);
+                if (s === "XL") await updateImageFloat(slot.id, "full", groupId);
+              }, imgWidth.reset);
             }}
           />
 
@@ -357,8 +563,9 @@ function SlotSettingsPopup({
                 <button
                   key={c}
                   type="button"
-                  onClick={() => updateImageCrop(slot.id, c, null, groupId)}
-                  className={`cursor-pointer px-1.5 py-1 font-headline text-[10px] transition-colors ${
+                  disabled={busy}
+                  onClick={() => run(() => updateImageCrop(slot.id, c, null, groupId))}
+                  className={`cursor-pointer px-1.5 py-1 font-headline text-[10px] transition-colors disabled:opacity-50 ${
                     (slot.imageCrop ?? "original") === c
                       ? "bg-ink text-white"
                       : "text-caption hover:text-maroon"
@@ -395,8 +602,9 @@ function SlotSettingsPopup({
               />
               <button
                 type="button"
-                onClick={() => updateImageCrop(slot.id, "custom", customRatio, groupId)}
-                className={`cursor-pointer font-headline text-[10px] px-2 py-0.5 border transition-colors ${
+                disabled={busy}
+                onClick={() => run(() => updateImageCrop(slot.id, "custom", customRatio, groupId))}
+                className={`cursor-pointer font-headline text-[10px] px-2 py-0.5 border transition-colors disabled:opacity-50 ${
                   slot.imageCrop === "custom"
                     ? "border-maroon text-maroon bg-maroon/5"
                     : "border-neutral-200 text-caption hover:text-maroon"
@@ -407,10 +615,18 @@ function SlotSettingsPopup({
             </div>
           )}
 
+          <AltTextField
+            slot={slot}
+            groupId={groupId}
+            run={run}
+            busy={busy}
+            autoFocus={autoFocusAlt}
+          />
+
           <CreditSearch
             current={slot.mediaCredit ?? ""}
             staffMembers={staffMembers}
-            onSelect={(name) => updateMediaCredit(slot.id, name, groupId)}
+            onSelect={(name) => run(() => updateMediaCredit(slot.id, name, groupId))}
           />
         </>
       )}
@@ -420,7 +636,7 @@ function SlotSettingsPopup({
           <ScaleRow
             label="Text size"
             current={slot.scale ?? "M"}
-            onChange={(s) => updateSlotScale(slot.id, s, groupId)}
+            onChange={(s) => run(() => updateSlotScale(slot.id, s, groupId))}
           />
           {!isHeadline && (
             <div className="flex items-center justify-between gap-2">
@@ -431,10 +647,10 @@ function SlotSettingsPopup({
                   min={50}
                   max={500}
                   step={10}
-                  value={pvLen}
+                  value={pvLen.value}
                   onChange={(e) => {
                     const v = parseInt(e.target.value, 10);
-                    if (!isNaN(v)) onPvLenChange(v);
+                    if (!isNaN(v)) pvLen.set(v);
                   }}
                   onBlur={(e) => {
                     const v = parseInt(e.target.value, 10);
@@ -453,10 +669,10 @@ function SlotSettingsPopup({
                   min="50"
                   max="500"
                   step="10"
-                  value={pvLen}
-                  onChange={(e) => onPvLenChange(parseInt(e.target.value, 10))}
-                  onMouseUp={() => updateSlotPreviewLength(slot.id, pvLen, groupId)}
-                  onTouchEnd={() => updateSlotPreviewLength(slot.id, pvLen, groupId)}
+                  value={pvLen.value}
+                  onChange={(e) => pvLen.set(parseInt(e.target.value, 10))}
+                  onMouseUp={() => commitPvLen(pvLen.value)}
+                  onTouchEnd={() => commitPvLen(pvLen.value)}
                   className="w-[70px] h-[12px] accent-maroon"
                 />
               </div>
@@ -466,8 +682,9 @@ function SlotSettingsPopup({
             <span className="font-headline text-[12px] text-caption">Featured</span>
             <button
               type="button"
-              onClick={() => toggleSlotFeatured(slot.id, !slot.featured, groupId)}
-              className={`cursor-pointer font-headline text-[11px] px-2.5 py-1 border transition-colors ${
+              disabled={busy}
+              onClick={() => run(() => toggleSlotFeatured(slot.id, !slot.featured, groupId))}
+              className={`cursor-pointer font-headline text-[11px] px-2.5 py-1 border transition-colors disabled:opacity-50 ${
                 slot.featured
                   ? "border-maroon text-maroon bg-maroon/5"
                   : "border-neutral-200 text-caption hover:text-maroon"
@@ -481,8 +698,9 @@ function SlotSettingsPopup({
               <span className="font-headline text-[12px] text-caption">Show author</span>
               <button
                 type="button"
-                onClick={() => toggleSlotByline(slot.id, !slot.showByline, groupId)}
-                className={`cursor-pointer font-headline text-[11px] px-2.5 py-1 border transition-colors ${
+                disabled={busy}
+                onClick={() => run(() => toggleSlotByline(slot.id, !slot.showByline, groupId))}
+                className={`cursor-pointer font-headline text-[11px] px-2.5 py-1 border transition-colors disabled:opacity-50 ${
                   slot.showByline
                     ? "border-maroon text-maroon bg-maroon/5"
                     : "border-neutral-200 text-caption hover:text-maroon"
@@ -517,6 +735,7 @@ function SlotAssignPopup({
   const [query, setQuery] = useState("");
   const ref = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { run, busy, error, clearError } = useSlotMutation();
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -536,9 +755,13 @@ function SlotAssignPopup({
           .slice(0, 8)
       : availableArticles.slice(0, 8);
 
-  async function handleSelect(articleId: string) {
-    onClose();
-    await assignToBlockSlot(slotId, articleId, groupId);
+  function handleSelect(articleId: string) {
+    // Close only once the assignment lands — if the action throws (published
+    // issue, slot outside this group) the popup stays open with the reason.
+    run(async () => {
+      await assignToBlockSlot(slotId, articleId, groupId);
+      onClose();
+    });
   }
 
   return (
@@ -546,6 +769,7 @@ function SlotAssignPopup({
       ref={ref}
       className="absolute left-0 right-0 top-full mt-1 bg-white border border-neutral-200 shadow-[0_4px_16px_rgba(0,0,0,0.08)] z-30"
     >
+      <SlotError message={error} onDismiss={clearError} className="m-2" />
       <div className="p-2 border-b border-neutral-100">
         <input
           ref={inputRef}
@@ -566,8 +790,9 @@ function SlotAssignPopup({
           <button
             key={a.id}
             type="button"
+            disabled={busy}
             onClick={() => handleSelect(a.id)}
-            className="cursor-pointer w-full text-left px-3 py-2 font-headline text-[13px] tracking-wide hover:bg-neutral-50 hover:text-maroon transition-colors flex items-baseline justify-between gap-2"
+            className="cursor-pointer w-full text-left px-3 py-2 font-headline text-[13px] tracking-wide hover:bg-neutral-50 hover:text-maroon transition-colors flex items-baseline justify-between gap-2 disabled:opacity-50"
           >
             <span className="truncate">{a.title}</span>
             <span className="text-[11px] text-caption/50 shrink-0">
@@ -595,7 +820,11 @@ function MediaUploadPopup({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const [sizeError, setSizeError] = useState("");
+  // The whole pick -> presign -> PUT -> assign sequence runs through `run`, so
+  // there is one error channel and one in-flight lock: choosing a second file
+  // while the first is still uploading is dropped rather than double-firing
+  // `assignMediaToBlockSlot`.
+  const { run, busy, error, clearError } = useSlotMutation();
   // Must match `uploadRequestSchema` in lib/validations.ts. Server rejects anything bigger or
   // any content type outside this list with a 400.
   const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -609,57 +838,61 @@ function MediaUploadPopup({
     return () => document.removeEventListener("mousedown", handleClick);
   }, [onClose]);
 
-  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setSizeError("");
-    if (!ALLOWED_TYPES.has(file.type)) {
-      setSizeError("File type must be JPEG, PNG, or WEBP");
-      if (fileRef.current) fileRef.current.value = "";
-      return;
-    }
-    if (file.size > MAX_FILE_SIZE) {
-      setSizeError(`File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Max is 10MB.`);
-      if (fileRef.current) fileRef.current.value = "";
-      return;
-    }
-    const type = "image";
 
-    try {
-      // Step 1: ask the API for a presigned S3 URL.
-      const presignRes = await fetch("/api/upload", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          filename: file.name,
-          contentType: file.type,
-          contentLength: file.size,
-        }),
-      });
-      if (!presignRes.ok) {
-        const err = await presignRes.json().catch(() => ({}));
-        setSizeError(err?.error?.message ?? "Upload failed (presign)");
-        return;
-      }
-      const { uploadUrl, publicUrl } = await presignRes.json();
+    run(
+      async () => {
+        // The client-side caps mirror `uploadRequestSchema`; throwing puts them
+        // on the same inline alert as a server refusal.
+        if (!ALLOWED_TYPES.has(file.type)) {
+          throw new Error("File type must be JPEG, PNG, or WEBP");
+        }
+        if (file.size > MAX_FILE_SIZE) {
+          throw new Error(
+            `File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Max is 10MB.`,
+          );
+        }
 
-      // Step 2: upload the file directly to S3 with the presigned URL.
-      const putRes = await fetch(uploadUrl, {
-        method: "PUT",
-        headers: { "Content-Type": file.type },
-        body: file,
-      });
-      if (!putRes.ok) {
-        setSizeError("Upload failed (S3)");
-        return;
-      }
+        // Step 1: ask the API for a presigned S3 URL.
+        const presignRes = await fetch("/api/upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            filename: file.name,
+            contentType: file.type,
+            contentLength: file.size,
+          }),
+        });
+        if (!presignRes.ok) {
+          const err = await presignRes.json().catch(() => ({}));
+          throw new Error(err?.error?.message ?? "Upload failed (presign)");
+        }
+        const { uploadUrl, publicUrl } = await presignRes.json();
 
-      // Step 3: tell the server the slot now points at this URL.
-      await assignMediaToBlockSlot(slotId, publicUrl, type, file.name, "", groupId);
-      onClose();
-    } catch (err) {
-      setSizeError(`Upload failed: ${(err as Error).message}`);
-    }
+        // Step 2: upload the file directly to S3 with the presigned URL.
+        const putRes = await fetch(uploadUrl, {
+          method: "PUT",
+          headers: { "Content-Type": file.type },
+          body: file,
+        });
+        if (!putRes.ok) throw new Error("Upload failed (S3)");
+
+        // Step 3: tell the server the slot now points at this URL. Alt text starts
+        // empty on purpose — the filename ("IMG_4821.jpg") is not a description —
+        // and the slot is flagged so the settings popup opens on the alt field.
+        // `run` refreshes the route, which is what swaps this placeholder for the
+        // real image.
+        await assignMediaToBlockSlot(slotId, publicUrl, "image", "", "", groupId);
+        altFocusSlotId = slotId;
+        onClose();
+      },
+      // Clear the input so the same file can be re-picked after a failure.
+      () => {
+        if (fileRef.current) fileRef.current.value = "";
+      },
+    );
   }
 
   return (
@@ -670,7 +903,7 @@ function MediaUploadPopup({
       <p className="font-headline text-[12px] font-semibold tracking-wide mb-2">Upload media</p>
       <label className="cursor-pointer block w-full border border-dashed border-neutral-300 bg-neutral-50 hover:bg-neutral-100 hover:border-ink/40 transition-colors py-6 px-4 text-center">
         <span className="font-headline text-[12px] tracking-wide text-ink/70 block">
-          Click to choose a file
+          {busy ? "Uploading…" : "Click to choose a file"}
         </span>
         <span className="font-headline text-[10px] tracking-wide text-caption/50 block mt-1">
           JPEG, PNG, or WEBP &middot; max 10MB
@@ -680,12 +913,11 @@ function MediaUploadPopup({
           type="file"
           accept="image/jpeg,image/png,image/webp"
           onChange={handleFile}
+          disabled={busy}
           className="hidden"
         />
       </label>
-      {sizeError && (
-        <p className="font-headline text-[10px] text-maroon mt-1.5">{sizeError}</p>
-      )}
+      <SlotError message={error} onDismiss={clearError} className="mt-1.5" />
     </div>
   );
 }
@@ -828,8 +1060,13 @@ export function EditableSlot({
   const inEditMode = ctx !== null;
   const [popupType, setPopupType] = useState<"article" | "settings" | null>(null);
   const cogRef = useRef<HTMLButtonElement>(null);
-  const [pvLen, setPvLen] = useState(Number(slot?.previewLength) || 200);
-  const [imgWidth, setImgWidth] = useState(slot?.imageWidth ?? 100);
+  // Derived from the slot, not copied into state: the popup slider and the
+  // rendered image must agree, and both must follow the refreshed server value.
+  // The fallbacks cover an absent `slot`, not a null column — both fields are
+  // non-null in `PopulatedSlot`, and the popup only renders once `slot` exists.
+  const pvLen = useTransientOverride(Number(slot?.previewLength) || 200);
+  const imgWidth = useTransientOverride(slot ? slot.imageWidth : 100);
+  const { run, busy, error, clearError } = useSlotMutation();
 
   if (!inEditMode) {
     if (!slot?.article) return null;
@@ -886,24 +1123,28 @@ export function EditableSlot({
         />
         <button
           type="button"
+          disabled={busy}
           onClick={(e) => {
             e.stopPropagation();
             e.preventDefault();
-            clearSlotArticle(slot.id, ctx.groupId);
+            run(() => clearSlotArticle(slot.id, ctx.groupId));
           }}
-          className="cursor-pointer bg-white/90 border border-ink/10 w-6 h-6 flex items-center justify-center text-caption hover:text-maroon transition-colors text-[13px]"
+          className="cursor-pointer bg-white/90 border border-ink/10 w-6 h-6 flex items-center justify-center text-caption hover:text-maroon transition-colors text-[13px] disabled:opacity-50"
         >
           &times;
         </button>
       </div>
+      <SlotError
+        message={error}
+        onDismiss={clearError}
+        className="absolute top-full left-0 right-0 mt-1 z-30"
+      />
       {popupType === "settings" && (
         <SlotSettingsPopup
           slot={slot}
           groupId={ctx.groupId}
           pvLen={pvLen}
-          onPvLenChange={setPvLen}
           imgWidth={imgWidth}
-          onImgWidthChange={setImgWidth}
           staffMembers={ctx.staffMembers}
           anchorRef={cogRef}
           onClose={() => setPopupType(null)}
@@ -950,11 +1191,26 @@ export function EditableImage({
 }) {
   const ctx = useEditorContext();
   const inEditMode = ctx !== null;
-  const [popupType, setPopupType] = useState<"settings" | null>(null);
+  // Freshly uploaded image: open the settings popup on the alt-text field so the
+  // uploader writes a description instead of shipping the image without one.
+  const [popupType, setPopupType] = useState<"settings" | null>(() =>
+    altFocusSlotId === slot.id ? "settings" : null,
+  );
+  const [focusAlt, setFocusAlt] = useState(() => altFocusSlotId === slot.id);
   const cogRef = useRef<HTMLButtonElement>(null);
-  const [pvLen, setPvLen] = useState(Number(slot.previewLength) || 200);
-  const [imgWidth, setImgWidth] = useState(slot.imageWidth ?? 100);
-  const cropRatio = parseCropRatio(slot.imageCrop ?? "original", slot.imageCropCustom ?? null);
+  // `slot.imageWidth` is the source of truth; the override only covers the drag
+  // in progress, and is dropped as soon as the server value lands — or rolled
+  // back by `imgWidth.reset` if the save is refused.
+  const pvLen = useTransientOverride(Number(slot.previewLength) || 200);
+  const imgWidth = useTransientOverride(slot.imageWidth);
+  const { run, busy, error, clearError } = useSlotMutation();
+  const cropRatio = parseCropRatio(slot.imageCrop, slot.imageCropCustom);
+
+  // The hand-off is one-shot: clear it now that this image has mounted, so a
+  // later refresh doesn't reopen the popup.
+  useEffect(() => {
+    if (altFocusSlotId === slot.id) altFocusSlotId = null;
+  }, [slot.id]);
   const isMediaSlot = slot.slotRole === "image" || slot.slotRole === "media";
   const displayCredit = credit ?? slot.mediaCredit ?? null;
 
@@ -997,10 +1253,12 @@ export function EditableImage({
           alt={alt}
           credit={displayCredit}
           imageFloat={slot.imageFloat ?? "full"}
-          imageWidth={imgWidth}
+          imageWidth={imgWidth.value}
           cropRatio={cropRatio}
-          onWidthChange={setImgWidth}
-          onWidthCommit={(w) => updateImageWidth(slot.id, w, ctx.groupId)}
+          onWidthChange={imgWidth.set}
+          onWidthCommit={(w) =>
+            run(() => updateImageWidth(slot.id, w, ctx.groupId), imgWidth.reset)
+          }
         />
         <div className="absolute top-1 right-1 flex items-center gap-0.5 opacity-0 group-hover/slot:opacity-100 transition-opacity z-20">
           <CogButton
@@ -1009,28 +1267,39 @@ export function EditableImage({
           />
           <button
             type="button"
+            disabled={busy}
             onClick={(e) => {
               e.stopPropagation();
               e.preventDefault();
-              if (isMediaSlot) clearBlockSlot(slot.id, ctx.groupId);
-              else clearSlotMedia(slot.id, ctx.groupId);
+              run(() =>
+                isMediaSlot
+                  ? clearBlockSlot(slot.id, ctx.groupId)
+                  : clearSlotMedia(slot.id, ctx.groupId),
+              );
             }}
-            className="cursor-pointer bg-white/90 border border-ink/10 w-6 h-6 flex items-center justify-center text-caption hover:text-maroon transition-colors text-[13px]"
+            className="cursor-pointer bg-white/90 border border-ink/10 w-6 h-6 flex items-center justify-center text-caption hover:text-maroon transition-colors text-[13px] disabled:opacity-50"
           >
             &times;
           </button>
         </div>
+        <SlotError
+          message={error}
+          onDismiss={clearError}
+          className="absolute top-full left-0 right-0 mt-1 z-30"
+        />
         {popupType === "settings" && (
           <SlotSettingsPopup
             slot={slot}
             groupId={ctx.groupId}
             pvLen={pvLen}
-            onPvLenChange={setPvLen}
             imgWidth={imgWidth}
-            onImgWidthChange={setImgWidth}
             staffMembers={ctx.staffMembers}
             anchorRef={cogRef}
-            onClose={() => setPopupType(null)}
+            autoFocusAlt={focusAlt}
+            onClose={() => {
+              setPopupType(null);
+              setFocusAlt(false);
+            }}
           />
         )}
       </div>
@@ -1055,28 +1324,39 @@ export function EditableImage({
         />
         <button
           type="button"
+          disabled={busy}
           onClick={(e) => {
             e.stopPropagation();
             e.preventDefault();
-            if (isMediaSlot) clearBlockSlot(slot.id, ctx.groupId);
-            else clearSlotMedia(slot.id, ctx.groupId);
+            run(() =>
+              isMediaSlot
+                ? clearBlockSlot(slot.id, ctx.groupId)
+                : clearSlotMedia(slot.id, ctx.groupId),
+            );
           }}
-          className="cursor-pointer bg-white/90 border border-ink/10 w-6 h-6 flex items-center justify-center text-caption hover:text-maroon transition-colors text-[13px]"
+          className="cursor-pointer bg-white/90 border border-ink/10 w-6 h-6 flex items-center justify-center text-caption hover:text-maroon transition-colors text-[13px] disabled:opacity-50"
         >
           &times;
         </button>
       </div>
+      <SlotError
+        message={error}
+        onDismiss={clearError}
+        className="absolute top-full left-0 right-0 mt-1 z-30"
+      />
       {popupType === "settings" && (
         <SlotSettingsPopup
           slot={slot}
           groupId={ctx.groupId}
           pvLen={pvLen}
-          onPvLenChange={setPvLen}
           imgWidth={imgWidth}
-          onImgWidthChange={setImgWidth}
           staffMembers={ctx.staffMembers}
           anchorRef={cogRef}
-          onClose={() => setPopupType(null)}
+          autoFocusAlt={focusAlt}
+          onClose={() => {
+            setPopupType(null);
+            setFocusAlt(false);
+          }}
         />
       )}
     </div>

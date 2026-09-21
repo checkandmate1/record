@@ -21,18 +21,38 @@ function initials(name: string): string {
 }
 
 const SEEN_PREFIX = "record:rt-seen:";
-export const ONCE_ONLY_KEY = "record:rt-once-only";
 export const REPLAY_EVENT = "rt-intro-replay";
 
-// Tri-state helper: read the once-only setting. Defaults to false (always replay)
-// so it's easy to QA the animation. Users can flip it on from the sidebar toggle.
-function readOnceOnly(): boolean {
-  if (typeof window === "undefined") return false;
+/**
+ * The intro plays at most once per browser session per edition, and never for a
+ * reader who has asked for less motion.
+ *
+ * `sessionStorage`, not `localStorage`: coming back tomorrow should still feel
+ * like an event, but the 2.4 s overlay must not block every navigation back to
+ * /roundtable within one sitting. Storage can throw (private mode, blocked site
+ * data) — treat that as "already seen" so a failure can never wedge the page
+ * behind an overlay.
+ */
+function alreadySeen(slug: string): boolean {
   try {
-    return window.localStorage.getItem(ONCE_ONLY_KEY) === "1";
+    return window.sessionStorage.getItem(SEEN_PREFIX + slug) === "1";
   } catch {
-    return false;
+    return true;
   }
+}
+
+function markSeen(slug: string) {
+  try {
+    window.sessionStorage.setItem(SEEN_PREFIX + slug, "1");
+  } catch {
+    /* ignore */
+  }
+}
+
+/** A 2.4 s spinning overlay is exactly what `prefers-reduced-motion` is about. */
+function prefersReducedMotion(): boolean {
+  if (typeof window.matchMedia !== "function") return false;
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
 export function RoundTableSpinIntro({
@@ -45,7 +65,7 @@ export function RoundTableSpinIntro({
   prompt: string;
 }) {
   // Three phases:
-  //   "checking"  → SSR + first client render, before we know what localStorage says
+  //   "checking"  → SSR + first client render, before we know whether it plays
   //   "playing"   → animation visible, content under it should still be hidden by parent
   //   "done"      → animation finished or skipped, parent reveals content
   const [phase, setPhase] = useState<"checking" | "playing" | "done">("checking");
@@ -55,22 +75,19 @@ export function RoundTableSpinIntro({
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const seenKey = SEEN_PREFIX + slug;
 
     function startPlayback() {
+      // Recorded up front, not in `skip()`: a reader who navigates away without
+      // dismissing the overlay has still seen it this session.
+      markSeen(slug);
       setExiting(false);
       setShowCta(false);
       setPhase("playing");
     }
 
     function shouldPlay(): boolean {
-      const onceOnly = readOnceOnly();
-      if (!onceOnly) return true;
-      try {
-        return window.localStorage.getItem(seenKey) !== "1";
-      } catch {
-        return true;
-      }
+      if (prefersReducedMotion()) return false;
+      return !alreadySeen(slug);
     }
 
     if (shouldPlay()) {
@@ -82,6 +99,8 @@ export function RoundTableSpinIntro({
       window.dispatchEvent(new CustomEvent("rt-intro-finished"));
     }
 
+    // The QA "Replay intro now" button is an explicit request, so it bypasses
+    // both the once-per-session flag and the reduced-motion check.
     function onReplay() {
       setBgVisible(false);
       startPlayback();
@@ -110,11 +129,7 @@ export function RoundTableSpinIntro({
       return;
     }
     window.setTimeout(() => {
-      try {
-        window.localStorage.setItem(SEEN_PREFIX + slug, "1");
-      } catch {
-        /* ignore */
-      }
+      markSeen(slug);
       window.dispatchEvent(new CustomEvent("rt-intro-finished"));
       setPhase("done");
     }, 500);

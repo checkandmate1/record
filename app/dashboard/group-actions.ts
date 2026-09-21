@@ -682,6 +682,26 @@ export async function updateMediaCredit(slotId: string, mediaCredit: string, gro
   invalidateHomepage();
 }
 
+/**
+ * Alt text for a slot's image. Uploads store `""` (never the filename — a screen
+ * reader announcing "IMG_4821.jpg" is worse than nothing), and the editor's slot
+ * settings popup is where a human fills it in.
+ */
+export async function updateMediaAlt(slotId: string, mediaAlt: string, groupId: string) {
+  const session = await auth();
+  requireDashboardRole(session);
+  await requireGroupMutable(groupId, session);
+
+  await updateSlotInGroup(slotId, groupId, {
+    mediaAlt: parseOrThrow(mediaCreditSchema, mediaAlt, "media alt text"),
+  });
+
+  revalidatePath(`/dashboard/groups/${groupId}`);
+  revalidatePath(`/dashboard/groups/${groupId}/layout`);
+  revalidatePath("/");
+  invalidateHomepage();
+}
+
 export async function clearSlotMedia(slotId: string, groupId: string) {
   const session = await auth();
   requireDashboardRole(session);

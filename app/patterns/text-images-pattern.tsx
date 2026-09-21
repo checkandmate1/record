@@ -13,6 +13,7 @@ import {
   EditableImage,
   EditableImagePlaceholder,
 } from "@/app/patterns/editable";
+import { cropRatioClass } from "@/app/patterns/crop";
 import { getPlaceholderArticle } from "@/app/patterns/placeholder";
 
 export function TextImagesPattern({
@@ -85,16 +86,7 @@ export function TextImagesPattern({
       {/* Right — two tall images side by side */}
       <div className="lg:w-[60%] flex gap-3">
         {imageSlots.map((slot) => {
-          const cropRatio =
-            slot?.imageCrop === "landscape"
-              ? "16/9"
-              : slot?.imageCrop === "portrait"
-                ? "3/4"
-                : slot?.imageCrop === "square"
-                  ? "1/1"
-                  : slot?.imageCrop === "custom" && slot?.imageCropCustom
-                    ? slot.imageCropCustom.replace(":", "/")
-                    : undefined;
+          const cropRatio = cropRatioClass(slot?.imageCrop, slot?.imageCropCustom);
           if (slot?.mediaUrl) {
             return (
               <div key={slot.id} className="flex-1 relative">

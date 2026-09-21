@@ -6,6 +6,7 @@ import {
   EditableImage,
   EditableImagePlaceholder,
 } from "@/app/patterns/editable";
+import { cropRatioClass } from "@/app/patterns/crop";
 import { getPlaceholderArticle } from "@/app/patterns/placeholder";
 
 export function SbThumbnailsPattern({
@@ -18,27 +19,23 @@ export function SbThumbnailsPattern({
   const displaySlots = slots.slice(0, 3);
   if (!editMode && displaySlots.every((s) => !s?.article)) return null;
 
+  // Live mode: an unfilled slot renders nothing (`EditableSlot` returns null), so
+  // its row and divider must go with it — otherwise the layout keeps a stray rule
+  // across empty space. Edit mode keeps every slot so it stays clickable.
+  const visibleSlots = editMode ? displaySlots : displaySlots.filter((s) => s?.article);
+
   return (
     <div>
-      {displaySlots.map((slot, idx) => {
+      {visibleSlots.map((slot, idx) => {
         const article = slot?.article ?? getPlaceholderArticle();
         const imgSrc = slot?.mediaUrl ?? null;
         const thumbSize = scalePx(40, slot?.imageScale);
-        const cropRatio =
-          slot?.imageCrop === "landscape"
-            ? "16/9"
-            : slot?.imageCrop === "portrait"
-              ? "3/4"
-              : slot?.imageCrop === "square"
-                ? "1/1"
-                : slot?.imageCrop === "custom" && slot?.imageCropCustom
-                  ? slot.imageCropCustom.replace(":", "/")
-                  : undefined;
+        const cropRatio = cropRatioClass(slot?.imageCrop, slot?.imageCropCustom);
         return (
           <div
             key={slot?.id ?? idx}
             className={`flex items-center gap-3 py-2.5 ${
-              idx < displaySlots.length - 1 ? "border-b border-neutral-200" : ""
+              idx < visibleSlots.length - 1 ? "border-b border-neutral-200" : ""
             }`}
           >
             {imgSrc ? (

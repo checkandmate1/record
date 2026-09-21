@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
+import { isDashboardRole } from "@/lib/roles";
 import { userMinimalNameSelect, userMinimalNameImageSelect } from "@/lib/prisma-selects";
 import { SubpageHeader } from "@/app/subpage-header";
 import { Footer } from "@/app/footer";
@@ -75,6 +77,10 @@ export default async function RoundTablePage({
 
   if (!rt || rt.group?.status !== "PUBLISHED") notFound();
 
+  // The drawer's "Intro Animation" block is a QA control, not something readers
+  // should see. Dashboard roles only.
+  const showIntroControls = isDashboardRole((await auth())?.user?.role);
+
   const introAuthors = rt.sides.flatMap((s, sideIdx) =>
     s.authors.map((a) => ({
       id: a.user.id,
@@ -92,7 +98,11 @@ export default async function RoundTablePage({
         <RoundTableSpinIntro slug={rt.slug} authors={introAuthors} prompt={rt.prompt} />
 
         <div className="flex justify-end mb-6">
-          <PastRoundTablesPanel items={archive} currentSlug={rt.slug} />
+          <PastRoundTablesPanel
+            items={archive}
+            currentSlug={rt.slug}
+            showIntroControls={showIntroControls}
+          />
         </div>
 
         <RoundTableDisplay

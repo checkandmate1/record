@@ -28,7 +28,9 @@ export function SbRoundTablePattern({
 
   return (
     <Link
-      href="/roundtable"
+      // This issue's debate, not whatever is newest: on /?page=2 a bare
+      // "/roundtable" points at the wrong edition.
+      href={`/roundtable/${roundTable.slug}`}
       className="group block rounded-sm border border-maroon/30 bg-gradient-to-br from-[rgba(139,26,26,0.07)] via-[rgba(139,26,26,0.03)] to-white px-4 py-5 hover:border-maroon transition-colors"
     >
       <p className="font-headline text-[10px] font-bold tracking-[0.18em] uppercase text-maroon">
